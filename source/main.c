@@ -13,6 +13,7 @@
 #include <wiiuse/wpad.h>
 
 #include "navigation/nav.h"
+#include "render/font.h"
 
 /* 256 KB GX command FIFO — generous for a 2D text-heavy UI */
 #define GX_FIFO_SIZE (256 * 1024)
@@ -104,6 +105,11 @@ int main(int argc, char **argv) {
 
     /* --- gx init --- */
     gx_init();
+
+    /* --- font init --- */
+    if (font_init() < 0) {
+        /* font init failed — continue with placeholder rendering */
+    }
 
     /* --- navigation init --- */
     nav_init();

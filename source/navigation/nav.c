@@ -18,6 +18,7 @@
 #include "screens.h"
 #include "../components/tab_bar.h"
 #include "../components/header_bar.h"
+#include "../render/font.h"
 
 /* ---- internal state ---- */
 
@@ -26,7 +27,7 @@ static nav_state_t nav;
 /* ---- content area placeholder renderers ---- */
 
 /*
- * Each screen renders a placeholder coloured rectangle with label text bars.
+ * Each screen renders a placeholder coloured rectangle with a label.
  * These will be replaced with real content in later phases.
  */
 
@@ -41,20 +42,6 @@ static void draw_quad(f32 x, f32 y, f32 w, f32 h, GXColor col) {
     GX_End();
 }
 
-static void draw_text_bars(f32 x, f32 y, u8 chars, GXColor col) {
-    GX_Begin(GX_TRIANGLES, GX_VTXFMT0, chars * 6);
-    for (u8 i = 0; i < chars; i++) {
-        f32 bx = x + (f32)i * 5.0f;
-        GX_Position3f32(bx,     y,      0.0f);
-        GX_Position3f32(bx + 3, y,      0.0f);
-        GX_Position3f32(bx + 3, y + 12, 0.0f);
-        GX_Position3f32(bx,     y,      0.0f);
-        GX_Position3f32(bx + 3, y + 12, 0.0f);
-        GX_Position3f32(bx,     y + 12, 0.0f);
-    }
-    GX_End();
-}
-
 /* distinct background colours per screen for visual identification */
 static const GXColor screen_bgs[SCREEN_COUNT] = {
     { 10, 10,  15, 255},  /* FEED — very dark blue-ish */
@@ -64,13 +51,13 @@ static const GXColor screen_bgs[SCREEN_COUNT] = {
     { 10, 12,  12, 255},  /* THREAD — very dark cyan-ish */
 };
 
-/* placeholder text bar counts for each screen's content label */
-static const u8 content_label_chars[SCREEN_COUNT] = {
-    16, /* FEED — "Feed content" placeholder */
-    16, /* SEARCH */
-    16, /* NOTIFICATIONS */
-    16, /* PROFILE */
-    16, /* THREAD */
+/* content area labels */
+static const char *content_labels[SCREEN_COUNT] = {
+    "Feed content",       /* SCREEN_FEED */
+    "Search content",     /* SCREEN_SEARCH */
+    "Notifications",      /* SCREEN_NOTIFICATIONS */
+    "Profile content",    /* SCREEN_PROFILE */
+    "Thread content",     /* SCREEN_THREAD */
 };
 
 static void render_content_area(screen_id_t screen) {
@@ -78,14 +65,14 @@ static void render_content_area(screen_id_t screen) {
     GXColor bg = screen_bgs[screen];
     draw_quad(0.0f, (f32)CONTENT_Y_TOP, 640.0f, (f32)CONTENT_HEIGHT, bg);
 
-    /* placeholder label centred in content area */
-    u8 chars = content_label_chars[screen];
-    f32 text_w = (f32)chars * 5.0f;
-    f32 text_x = 320.0f - text_w * 0.5f;
-    f32 text_y = (f32)CONTENT_Y_TOP + (f32)CONTENT_HEIGHT * 0.5f - 6.0f;
+    /* label centred in content area */
+    const char *label = content_labels[screen];
+    int tw = font_text_width(label, FONT_SIZE_HEADER);
+    f32 text_x = 320.0f - (f32)tw * 0.5f;
+    f32 text_y = (f32)CONTENT_Y_TOP + (f32)CONTENT_HEIGHT * 0.5f - 9.0f;
 
     GXColor text_col = {100, 100, 100, 255};
-    draw_text_bars(text_x, text_y, chars, text_col);
+    font_draw_text(text_x, text_y, label, FONT_SIZE_HEADER, text_col);
 }
 
 /* ---- control hints bar ---- */
@@ -105,18 +92,18 @@ static void render_hints_bar(void) {
     GXColor divider = {60, 60, 60, 255};
     draw_quad(0.0f, (f32)y, 640.0f, 1.0f, divider);
 
-    /* hint labels — 4 groups across the bar */
+    /* hint labels */
     GXColor hint_col = {120, 120, 120, 255};
-    f32 hint_y = (f32)y + 5.0f;
+    f32 hint_y = (f32)y + 4.0f;
 
-    /* "A:Select" at left */
-    draw_text_bars(20.0f, hint_y, 8, hint_col);
-    /* "B:Back" */
-    draw_text_bars(180.0f, hint_y, 6, hint_col);
-    /* "D:Scroll" */
-    draw_text_bars(320.0f, hint_y, 8, hint_col);
-    /* "+/-:Page" */
-    draw_text_bars(480.0f, hint_y, 8, hint_col);
+    /* "A: Select" at left */
+    font_draw_text(20.0f, hint_y, "A: Select", FONT_SIZE_HINTS, hint_col);
+    /* "B: Back" */
+    font_draw_text(180.0f, hint_y, "B: Back", FONT_SIZE_HINTS, hint_col);
+    /* "D-pad: Scroll" */
+    font_draw_text(320.0f, hint_y, "D-pad: Scroll", FONT_SIZE_HINTS, hint_col);
+    /* "+/-: Page" */
+    font_draw_text(500.0f, hint_y, "+/-: Page", FONT_SIZE_HINTS, hint_col);
 }
 
 /* ---- public API ---- */

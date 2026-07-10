@@ -13,6 +13,7 @@
 #include <gccore.h>
 #include "tab_bar.h"
 #include "../navigation/screens.h"
+#include "../render/font.h"
 
 /* Bluesky brand colours */
 #define BLUE_R 0x1d
@@ -32,14 +33,6 @@ static const char *tab_labels[TAB_COUNT] = {
     "Profile",
 };
 
-/* approximate character widths for placeholder text bars */
-static const u8 tab_label_widths[TAB_COUNT] = {
-    4,  /* Home */
-    5,  /* Search */
-    5,  /* Notifs */
-    7,  /* Profile */
-};
-
 /*
  * draw_quad — draw a solid coloured rectangle via GX immediate mode.
  *
@@ -57,26 +50,6 @@ static void draw_quad(f32 x, f32 y, f32 w, f32 h, GXColor col) {
     GX_End();
 }
 
-/*
- * draw_text_bars — placeholder text rendered as a series of thin vertical bars.
- *
- * Each bar is 3px wide with 2px gap, giving a rough "word" shape.
- * Total width = chars * 5.
- */
-static void draw_text_bars(f32 x, f32 y, u8 chars, GXColor col) {
-    GX_Begin(GX_TRIANGLES, GX_VTXFMT0, chars * 6);
-    for (u8 i = 0; i < chars; i++) {
-        f32 bx = x + (f32)i * 5.0f;
-        GX_Position3f32(bx,     y,      0.0f);
-        GX_Position3f32(bx + 3, y,      0.0f);
-        GX_Position3f32(bx + 3, y + 14, 0.0f);
-        GX_Position3f32(bx,     y,      0.0f);
-        GX_Position3f32(bx + 3, y + 14, 0.0f);
-        GX_Position3f32(bx,     y + 14, 0.0f);
-    }
-    GX_End();
-}
-
 void tab_bar_render(u8 active_tab) {
     /* dark background */
     GXColor bg = {30, 30, 30, 255};
@@ -90,10 +63,7 @@ void tab_bar_render(u8 active_tab) {
         f32 tab_x = (f32)i * (f32)TAB_WIDTH;
         f32 tab_center_x = tab_x + (f32)TAB_WIDTH * 0.5f;
 
-        /* label text (placeholder bars) */
-        u8 chars = tab_label_widths[i];
-        f32 text_w = (f32)chars * 5.0f;
-        f32 text_x = tab_center_x - text_w * 0.5f;
+        /* label text */
         f32 text_y = 10.0f;
 
         GXColor text_col;
@@ -102,7 +72,11 @@ void tab_bar_render(u8 active_tab) {
         } else {
             text_col.r = 140; text_col.g = 140; text_col.b = 140; text_col.a = 255;
         }
-        draw_text_bars(text_x, text_y, chars, text_col);
+
+        /* centre-align text within tab */
+        int tw = font_text_width(tab_labels[i], FONT_SIZE_TAB_BAR);
+        f32 text_x = tab_center_x - (f32)tw * 0.5f;
+        font_draw_text(text_x, text_y, tab_labels[i], FONT_SIZE_TAB_BAR, text_col);
 
         /* active underline */
         if (i == active_tab) {
