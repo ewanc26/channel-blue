@@ -93,7 +93,16 @@ export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib) \
 					-L$(LIBOGC_LIB)
 
 export OUTPUT	:=	$(CURDIR)/$(TARGET)
-.PHONY: $(BUILD) clean
+
+#---------------------------------------------------------------------------------
+# release artifacts: copy the full Homebrew Channel bundle to DISTDIR with a
+# vX.X.X suffix. Version comes from the latest git tag, falling back to the
+# short commit hash when the repo has no tags.
+#---------------------------------------------------------------------------------
+VERSION		:=	$(shell git -C $(CURDIR) describe --tags 2>/dev/null || git -C $(CURDIR) rev-parse --short HEAD)
+DISTDIR		:=	/Volumes/Storage/Wii software
+
+.PHONY: $(BUILD) clean release
 
 #---------------------------------------------------------------------------------
 $(BUILD):
@@ -108,6 +117,15 @@ clean:
 #---------------------------------------------------------------------------------
 run:
 	wiiload $(TARGET).dol
+
+#---------------------------------------------------------------------------------
+release: $(OUTPUT).dol
+	@echo release: copying bundle to "$(DISTDIR)"
+	@mkdir -p "$(DISTDIR)"
+	@cp $(OUTPUT).dol "$(DISTDIR)/$(TARGET) v$(VERSION).dol"
+	@cp meta.xml "$(DISTDIR)/meta v$(VERSION).xml"
+	@cp icon.png "$(DISTDIR)/icon v$(VERSION).png"
+	@echo release: done "$(TARGET) v$(VERSION)"
 
 #---------------------------------------------------------------------------------
 else
