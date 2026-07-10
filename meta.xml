@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app>
+	<name>Channel Blue</name>
+	<coder>Ewan Croft</coder>
+	<version>0.1.0</version>
+	<release_date>20260710000000</release_date>
+	<short_description>Bluesky client for the Wii</short_description>
+	<long_description>Channel Blue is a Bluesky client for the Nintendo Wii.
+Browse your timeline, read posts, and compose replies using the Wiimote
+and USB keyboard. Built on the AT Protocol via the wolfram C SDK.
+
+License: AGPL-3.0-or-later
+Requires: WiFi connection, Homebrew Channel.</long_description>
+</app>
