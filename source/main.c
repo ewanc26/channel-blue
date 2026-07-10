@@ -14,6 +14,8 @@
 
 #include "navigation/nav.h"
 #include "render/font.h"
+#include "render/image.h"
+#include "render/texcache.h"
 
 /* 256 KB GX command FIFO — generous for a 2D text-heavy UI */
 #define GX_FIFO_SIZE (256 * 1024)
@@ -111,6 +113,10 @@ int main(int argc, char **argv) {
         /* font init failed — continue with placeholder rendering */
     }
 
+    /* --- image init --- */
+    image_init();
+    texcache_init();
+
     /* --- navigation init --- */
     nav_init();
 
@@ -124,6 +130,7 @@ int main(int argc, char **argv) {
         nav_handle_input(pressed);
 
         /* draw this frame */
+        texcache_begin_frame();
         gx_begin_frame();
         nav_render();
 
@@ -137,6 +144,9 @@ int main(int argc, char **argv) {
         VIDEO_Flush();
         VIDEO_WaitVSync();
     }
+
+    texcache_shutdown();
+    image_shutdown();
 
     return 0;
 }
