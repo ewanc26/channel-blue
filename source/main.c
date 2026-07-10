@@ -1,8 +1,8 @@
 /*
  * Channel Blue — Bluesky client for the Nintendo Wii
  *
- * Bootstrap: GX rendering pipeline, double-buffered display, Wiimote input.
- * Draws a solid Bluesky-blue rectangle to prove the pipeline works.
+ * Bootstrap: GX rendering pipeline, double-buffered display, Wiimote input,
+ * navigation framework with tab bar, header, and screen stack.
  */
 
 #include <stdio.h>
@@ -12,39 +12,18 @@
 #include <gccore.h>
 #include <wiiuse/wpad.h>
 
+#include "navigation/nav.h"
+
 /* 256 KB GX command FIFO — generous for a 2D text-heavy UI */
 #define GX_FIFO_SIZE (256 * 1024)
-
-/* Bluesky brand colour: #1d9bf0 */
-#define BSKY_BLUE_R 0x1d
-#define BSKY_BLUE_G 0x9b
-#define BSKY_BLUE_B 0xf0
 
 static void *frameBuffer[2] = {NULL, NULL};
 static GXRModeObj *rmode = NULL;
 
 /*
- * GX vertex positions for a full-screen quad.
- * orthographic projection maps screen pixel coords directly,
- * so these match the 640x480 framebuffer dimensions.
- */
-static f32 quadVertices[] ATTRIBUTE_ALIGN(32) = {
-    /* top-left     */  0.0f,   0.0f,
-    /* top-right    */ 640.0f,   0.0f,
-    /* bottom-right */ 640.0f, 480.0f,
-    /* bottom-left  */   0.0f, 480.0f,
-};
-
-/* index buffer for a single quad (two triangles) */
-static u16 quadIndices[] ATTRIBUTE_ALIGN(32) = {
-    0, 1, 2,
-    0, 2, 3,
-};
-
-/*
  * gx_init — set up the GX rendering pipeline for 2D drawing.
  *
- * This configures the embedded framebuffer, viewport, orthographic projection,
+ * Configures the embedded framebuffer, viewport, orthographic projection,
  * and a vertex descriptor that accepts direct f32 positions with no tex coords.
  */
 static void gx_init(void) {
@@ -92,29 +71,18 @@ static void gx_init(void) {
 }
 
 /*
- * draw_blue_quad — draw a Bluesky-blue quad covering the full screen.
- *
- * The model-view matrix is set to identity with a small Z translation,
- * then 4 vertices are emitted as a triangle list.
+ * gx_begin_frame — prepare GX state for a new frame of drawing.
  */
-static void draw_blue_quad(void) {
+static void gx_begin_frame(void) {
+    GX_SetViewport(0, 0, rmode->fbWidth, rmode->efbHeight, 0, 1);
+    GX_InvVtxCache();
+    GX_InvalidateTexAll();
+
+    /* set model-view to identity with slight Z offset */
     Mtx modelView;
     guMtxIdentity(modelView);
     guMtxTransApply(modelView, modelView, 0.0f, 0.0f, -5.0f);
     GX_LoadPosMtxImm(modelView, GX_PNMTX0);
-
-    /*
-     * TODO(fx/gx): replace with a real UI — post cards, header bar, scroll cursor.
-     * For now this just proves the pipeline produces visible output.
-     */
-    GX_Begin(GX_TRIANGLES, GX_VTXFMT0, 6);
-        GX_Position3f32(quadVertices[0],  quadVertices[1],  0.0f);
-        GX_Position3f32(quadVertices[2],  quadVertices[3],  0.0f);
-        GX_Position3f32(quadVertices[4],  quadVertices[5],  0.0f);
-        GX_Position3f32(quadVertices[0],  quadVertices[1],  0.0f);
-        GX_Position3f32(quadVertices[4],  quadVertices[5],  0.0f);
-        GX_Position3f32(quadVertices[6],  quadVertices[7],  0.0f);
-    GX_End();
 }
 
 int main(int argc, char **argv) {
@@ -137,6 +105,9 @@ int main(int argc, char **argv) {
     /* --- gx init --- */
     gx_init();
 
+    /* --- navigation init --- */
+    nav_init();
+
     u32 fb = 0; /* current framebuffer index */
 
     /* --- main loop --- */
@@ -144,13 +115,11 @@ int main(int argc, char **argv) {
         WPAD_ScanPads();
 
         u32 pressed = WPAD_ButtonsDown(0);
-        if (pressed & WPAD_BUTTON_HOME) exit(0);
+        nav_handle_input(pressed);
 
         /* draw this frame */
-        GX_SetViewport(0, 0, rmode->fbWidth, rmode->efbHeight, 0, 1);
-        GX_InvVtxCache();
-        GX_InvalidateTexAll();
-        draw_blue_quad();
+        gx_begin_frame();
+        nav_render();
 
         /* present */
         GX_DrawDone();

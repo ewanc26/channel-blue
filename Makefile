@@ -17,7 +17,7 @@ include $(DEVKITPPC)/wii_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	channel-blue
 BUILD		:=	build
-SOURCES		:=	source
+SOURCES		:=	source source/navigation source/components
 DATA		:=
 INCLUDES	:=
 
