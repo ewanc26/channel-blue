@@ -23,6 +23,7 @@ apps/
 .letta/
 .agents/
 .codex/
+.devdeps/
 
 # Generated scratch output
 generated/
