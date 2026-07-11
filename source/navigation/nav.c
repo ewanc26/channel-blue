@@ -106,7 +106,8 @@ static void render_thread(void) {
 	draw_clipped_text(24, CONTENT_Y_TOP + 24,
 	                  post->display_name ? post->display_name : post->author, 60, author);
 	draw_clipped_text(24, CONTENT_Y_TOP + 64, post->text, 82, body);
-	draw_clipped_text(24, CONTENT_Y_TOP + 112, "A: Reply   1: Like   2: Repost", 70,
+	draw_clipped_text(24, CONTENT_Y_TOP + 112,
+	                  "A: Reply   +: Follow   1: Like   2: Repost", 70,
 	                  (GXColor){100, 165, 210, 255});
 }
 
@@ -179,7 +180,7 @@ static void render_placeholder(screen_id_t screen) {
 
 static void render_hints(screen_id_t screen) {
 	const char *hints = "D-pad: Move   A: Open   -: Compose   1/2: Like/Repost";
-	if (screen == SCREEN_THREAD) hints = "A: Reply   B: Back   1: Like   2: Repost";
+	if (screen == SCREEN_THREAD) hints = "A: Reply   +: Follow   B: Back   1: Like   2: Repost";
 	else if (screen == SCREEN_COMPOSE) hints = "Enter/A: Send   B/Esc: Cancel   USB keyboard: Type";
 	else if (screen == SCREEN_LOGIN) hints = "Up/Down/Tab: Field   Enter/A: Sign in   USB keyboard: Type";
 	draw_quad(0, 480 - HINTS_BAR_HEIGHT, 640, HINTS_BAR_HEIGHT,
@@ -271,6 +272,8 @@ void nav_handle_input(u32 pressed) {
 			if (feed->has_more) cb_timeline_load_more(feed, feed_backend, feed_context);
 			else cb_timeline_refresh(feed, feed_backend, feed_context);
 		}
+		if (pressed & WPAD_BUTTON_PLUS && screen == SCREEN_THREAD)
+			cb_timeline_follow_selected(feed, feed_backend, feed_context);
 		if (pressed & WPAD_BUTTON_B) nav_pop();
 	} else {
 		if (pressed & WPAD_BUTTON_B) nav_pop();
