@@ -26,6 +26,7 @@ static const char *screen_title_labels[SCREEN_COUNT] = {
     "Notifs",
     "Profile",
     "Thread",
+    "Compose",
 };
 
 /*

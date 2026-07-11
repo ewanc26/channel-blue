@@ -11,8 +11,11 @@
 #include <malloc.h>
 #include <gccore.h>
 #include <wiiuse/wpad.h>
+#include <wiikeyboard/keyboard.h>
 
 #include "navigation/nav.h"
+#include "app/timeline.h"
+#include "app/compose.h"
 #include "render/font.h"
 #include "render/image.h"
 #include "render/texcache.h"
@@ -22,6 +25,10 @@
 
 static void *frameBuffer[2] = {NULL, NULL};
 static GXRModeObj *rmode = NULL;
+
+static void keyboard_keypress(char symbol) {
+    nav_handle_key((unsigned char)symbol);
+}
 
 /*
  * gx_init — set up the GX rendering pipeline for 2D drawing.
@@ -92,6 +99,7 @@ int main(int argc, char **argv) {
     /* --- video init --- */
     VIDEO_Init();
     WPAD_Init();
+    KEYBOARD_Init(keyboard_keypress);
 
     rmode = VIDEO_GetPreferredMode(NULL);
 
@@ -119,6 +127,12 @@ int main(int argc, char **argv) {
 
     /* --- navigation init --- */
     nav_init();
+    cb_timeline timeline;
+    cb_compose compose;
+    cb_timeline_backend backend = {0};
+    cb_timeline_init(&timeline);
+    cb_compose_init(&compose, 0);
+    nav_bind_timeline(&timeline, &compose, &backend, NULL);
 
     u32 fb = 0; /* current framebuffer index */
 
@@ -147,6 +161,9 @@ int main(int argc, char **argv) {
 
     texcache_shutdown();
     image_shutdown();
+    cb_timeline_free(&timeline);
+    KEYBOARD_Deinit();
+    font_shutdown();
 
     return 0;
 }
