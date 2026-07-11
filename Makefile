@@ -17,14 +17,21 @@ include $(DEVKITPPC)/wii_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	channel-blue
 BUILD		:=	build
-SOURCES		:=	source source/navigation source/components source/render
+SOURCES		:=	source source/app source/integration source/navigation source/components source/render
 DATA		:=	data
+PROJECT_ROOT	:=	$(patsubst %/,%,$(dir $(abspath $(firstword $(MAKEFILE_LIST)))))
+WOLFRAM_DIR	?=	$(abspath $(PROJECT_ROOT)/../wolfram)
+WOLFRAM_BUILD	?=	$(WOLFRAM_DIR)/build-wii
+HOST_WOLFRAM_BUILD ?= $(WOLFRAM_DIR)/build
 INCLUDES	:=
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
-CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE) -I$(DEVKITPRO)/portlibs/ppc/include -I$(DEVKITPRO)/portlibs/ppc/include/freetype2
+CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE) \
+	-I$(WOLFRAM_DIR)/include -I$(WOLFRAM_BUILD)/_deps/cjson-src \
+	-I$(DEVKITPRO)/portlibs/ppc/include \
+	-I$(DEVKITPRO)/portlibs/ppc/include/freetype2
 CXXFLAGS	=	$(CFLAGS)
 
 LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map
@@ -32,13 +39,19 @@ LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:=	-lfreetype -lpng -ljpeg -lz -lbz2 -lbrotlidec -lbrotlicommon -lwiiuse -lbte -logc -lm
+LIBS	:=	$(WOLFRAM_BUILD)/libwolfram.a \
+		$(WOLFRAM_BUILD)/_deps/cjson-build/libcjson.a \
+		$(WOLFRAM_BUILD)/_deps/libcbor-build/src/libcbor.a \
+		-lfreetype -lpng -ljpeg -lz -lbz2 -lbrotlidec -lbrotlicommon \
+		-lfat -lwiikeyboard -lwiiuse -lbte -logc -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:=	$(DEVKITPRO)/portlibs/ppc
+LIBDIRS	:=	$(DEVKITPRO)/portlibs/ppc $(WOLFRAM_BUILD) \
+		$(WOLFRAM_BUILD)/_deps/cjson-build \
+		$(WOLFRAM_BUILD)/_deps/libcbor-build/src
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -102,7 +115,7 @@ export OUTPUT	:=	$(CURDIR)/$(TARGET)
 VERSION		:=	$(shell git -C $(CURDIR) describe --tags 2>/dev/null || git -C $(CURDIR) rev-parse --short HEAD)
 DISTDIR		:=	/Volumes/Storage/Wii software
 
-.PHONY: $(BUILD) clean release
+.PHONY: $(BUILD) clean release test
 
 #---------------------------------------------------------------------------------
 $(BUILD):
@@ -126,6 +139,40 @@ release: $(OUTPUT).dol
 	@cp meta.xml "$(DISTDIR)/meta v$(VERSION).xml"
 	@cp icon.png "$(DISTDIR)/icon v$(VERSION).png"
 	@echo release: done "$(TARGET) v$(VERSION)"
+
+# Host-side tests cover pure application modules without requiring Wii hardware.
+test:
+	@mkdir -p build-host
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_session_store.c source/app/session_store.c \
+		-o build-host/test_session_store
+	@build-host/test_session_store
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_timeline.c source/app/timeline.c \
+		-o build-host/test_timeline
+	@build-host/test_timeline
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_compose.c source/app/compose.c source/app/timeline.c \
+		-o build-host/test_compose
+	@build-host/test_compose
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_auth.c source/app/auth.c source/app/session_store.c \
+		-o build-host/test_auth
+	@build-host/test_auth
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_login.c source/app/login.c source/app/auth.c \
+		source/app/session_store.c -o build-host/test_login
+	@build-host/test_login
+	@cc -std=c11 -Wall -Wextra -Werror -Isource -I$(WOLFRAM_DIR)/include \
+		-I$(HOST_WOLFRAM_BUILD)/_deps/cjson-src \
+		tests/test_wolfram_backend.c source/integration/wolfram_backend.c \
+		source/app/auth.c source/app/session_store.c source/app/timeline.c \
+		-L$(HOST_WOLFRAM_BUILD) -lwolfram \
+		-L$(HOST_WOLFRAM_BUILD)/_deps/cjson-build -lcjson \
+		-o build-host/test_wolfram_backend
+	@DYLD_LIBRARY_PATH=$(HOST_WOLFRAM_BUILD):$(HOST_WOLFRAM_BUILD)/_deps/cjson-build:$(HOST_WOLFRAM_BUILD)/_deps/libcbor-build/src \
+	 LD_LIBRARY_PATH=$(HOST_WOLFRAM_BUILD):$(HOST_WOLFRAM_BUILD)/_deps/cjson-build:$(HOST_WOLFRAM_BUILD)/_deps/libcbor-build/src \
+	 build-host/test_wolfram_backend
 
 #---------------------------------------------------------------------------------
 else

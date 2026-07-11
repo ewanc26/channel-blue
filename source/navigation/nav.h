@@ -10,6 +10,8 @@
 
 #include <gccore.h>
 #include "screens.h"
+#include "../app/compose.h"
+#include "../app/login.h"
 
 /* layout constants (pixels) */
 #define TAB_BAR_HEIGHT    40
@@ -35,8 +37,21 @@ typedef struct {
 /* initialise navigation to default state (all tabs at root) */
 void nav_init(void);
 
+/* Bind the application controller and its transport adapter. The pointed-to
+ * objects must outlive the navigation loop. */
+void nav_bind_timeline(cb_timeline *timeline, cb_compose *compose,
+                       const cb_timeline_backend *backend, void *context);
+
+/* Bind authentication after nav_bind_timeline. Signed-out users are routed to
+ * the login screen; resumed users load the feed immediately. */
+void nav_bind_auth(cb_auth *auth, cb_login_form *login,
+                   const cb_auth_backend *backend, const char *session_path);
+
 /* handle one frame of input; called before render */
 void nav_handle_input(u32 pressed);
+
+/* Feed one translated USB keyboard symbol into the compose screen. */
+void nav_handle_key(unsigned int symbol);
 
 /* render the full navigation chrome + current screen content */
 void nav_render(void);
