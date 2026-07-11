@@ -134,6 +134,10 @@ test:
 		tests/test_session_store.c source/app/session_store.c \
 		-o build-host/test_session_store
 	@build-host/test_session_store
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_timeline.c source/app/timeline.c \
+		-o build-host/test_timeline
+	@build-host/test_timeline
 
 #---------------------------------------------------------------------------------
 else
