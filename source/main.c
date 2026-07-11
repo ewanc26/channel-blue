@@ -12,10 +12,15 @@
 #include <gccore.h>
 #include <wiiuse/wpad.h>
 #include <wiikeyboard/keyboard.h>
+#include <fat.h>
+#include <sdcard/wiisd_io.h>
+#include <wolfram/platform.h>
 
 #include "navigation/nav.h"
+#include "app/auth.h"
 #include "app/timeline.h"
 #include "app/compose.h"
+#include "integration/wolfram_backend.h"
 #include "render/font.h"
 #include "render/image.h"
 #include "render/texcache.h"
@@ -96,10 +101,18 @@ static void gx_begin_frame(void) {
 }
 
 int main(int argc, char **argv) {
+    int sd_mounted;
+    cb_wolfram_context wolfram;
+    cb_auth auth;
+    cb_auth_backend auth_backend;
+    cb_timeline_backend backend;
+
     /* --- video init --- */
     VIDEO_Init();
     WPAD_Init();
     KEYBOARD_Init(keyboard_keypress);
+    sd_mounted = fatMountSimple("sd", &__io_wiisd);
+    wf_platform_init();
 
     rmode = VIDEO_GetPreferredMode(NULL);
 
@@ -129,10 +142,17 @@ int main(int argc, char **argv) {
     nav_init();
     cb_timeline timeline;
     cb_compose compose;
-    cb_timeline_backend backend = {0};
+    cb_wolfram_context_init(&wolfram);
+    cb_auth_init(&auth);
+    auth_backend = cb_wolfram_auth_backend();
+    backend = cb_wolfram_timeline_backend();
     cb_timeline_init(&timeline);
     cb_compose_init(&compose, 0);
-    nav_bind_timeline(&timeline, &compose, &backend, NULL);
+    if (sd_mounted)
+        cb_auth_resume(&auth, &auth_backend, &wolfram,
+                       "sd:/apps/channel-blue/session.dat");
+    nav_bind_timeline(&timeline, &compose,
+                      auth.state == CB_AUTH_READY ? &backend : NULL, &wolfram);
 
     u32 fb = 0; /* current framebuffer index */
 
@@ -162,6 +182,10 @@ int main(int argc, char **argv) {
     texcache_shutdown();
     image_shutdown();
     cb_timeline_free(&timeline);
+    cb_auth_free(&auth);
+    cb_wolfram_context_free(&wolfram);
+    wf_platform_shutdown();
+    if (sd_mounted) fatUnmount("sd");
     KEYBOARD_Deinit();
     font_shutdown();
 
