@@ -7,11 +7,11 @@ your couch, using the Wiimote and a USB keyboard. Built on the
 [AT Protocol](https://atproto.com) via the
 [wolfram](https://github.com/ewan-croft/wolfram) C SDK.
 
-**Status:** MVP integration in progress. The Wii UI, USB-keyboard sign-in and
-composition flows, bounded timeline controller, SD session persistence, image
-pipeline, and concrete wolfram adapter are implemented and cross-compile to a
-`.dol`. Live Bluesky access is still gated by wolfram's honest
-`WF_ERR_NOT_IMPLEMENTED` Wii HTTPS/TLS transport.
+**Status:** MVP candidate. The Wii UI, USB-keyboard sign-in and composition
+flows, bounded timeline controller, SD session persistence, Wolfram adapter,
+and mbedTLS-backed Wii HTTPS transport are implemented and cross-compile to a
+`.dol`. The UI boots in Dolphin; live PDS login and TLS still require final
+verification on Wii hardware.
 
 ## Features
 
@@ -19,7 +19,6 @@ pipeline, and concrete wolfram adapter are implemented and cross-compile to a
 - Read individual posts and threads
 - Compose posts and replies (USB keyboard input)
 - Like, repost, and follow
-- Avatar thumbnails
 - Session persistence on SD card
 
 ## Requirements
@@ -50,6 +49,7 @@ pipeline, and concrete wolfram adapter are implemented and cross-compile to a
 sudo dkp-pacman -S wii-dev ppc-freetype ppc-libpng ppc-zlib
 
 # Build libwolfram and its declared cJSON/libcbor dependencies for PPC:
+../wolfram/tools/build_wii_mbedtls.sh
 cmake -S ../wolfram -B ../wolfram/build-wii \
   -DCMAKE_TOOLCHAIN_FILE=../wolfram/.devdeps/wii.cmake \
   -DWOLFRAM_BUILD_WII=ON -DCMAKE_BUILD_TYPE=Release
@@ -57,9 +57,21 @@ cmake --build ../wolfram/build-wii -j
 
 # Build Channel Blue
 make
+
+# Assemble dist/apps/channel-blue/ with a unique TLS entropy seed
+make bundle
 ```
 
 The output is `channel-blue.dol`.
+
+`make bundle` generates a unique 64-byte TLS seed using OpenSSL and retains it
+across rebuilds. Do not copy the same `entropy.bin` to more than one
+installation. Channel Blue atomically rotates it before enabling TLS on every
+launch. For a manually assembled installation, generate it with:
+
+```sh
+openssl rand 64 > entropy.bin
+```
 
 ## Installing
 
@@ -72,6 +84,7 @@ sd:/
       boot.dol       ← channel-blue.dol (renamed)
       meta.xml       ← from repo root
       icon.png       ← from repo root
+      entropy.bin    ← unique 64-byte TLS seed
 ```
 
 Or deploy directly over WiFi:
@@ -79,6 +92,30 @@ Or deploy directly over WiFi:
 ```sh
 wiiload channel-blue.dol
 ```
+
+`wiiload` does not provide an SD-backed `entropy.bin`; install the bundle once
+before using direct uploads. The file remains on SD and is rotated by Channel
+Blue on each launch.
+
+### Dolphin smoke test
+
+Dolphin can boot the generated DOL for UI and controller testing:
+
+```sh
+make dolphin
+```
+
+The macOS launcher explicitly selects Dolphin's x86_64 slice because Dolphin
+2606's ARM64 JIT can misdetect CPU features on some Apple Silicon Macs and
+crash or refuse the JIT recompiler (forcing a fall back to the slow cached
+interpreter). Running the x86_64 slice under Rosetta sidesteps the ARM64 JIT
+entirely. NEON/AdvSIMD is mandatory in AArch64 and is not the cause. Other
+platforms can launch `channel-blue.dol` directly.
+
+For sign-in/network testing, enable Dolphin's virtual SD card and copy the
+contents of `dist/` to its root so `sd:/apps/channel-blue/entropy.bin` exists.
+Dolphin is useful for iteration, but final WiFi, clock, SD durability, and TLS
+testing must be performed on Wii hardware.
 
 Then launch **Channel Blue** from the Homebrew Channel.
 
@@ -114,7 +151,8 @@ the active sign-in field; Enter submits. Passwords are masked and never saved.
 - [x] Makefile and Homebrew Channel DOL
 - [x] Cross-compile and link libwolfram for PPC
 - [x] WiFi initialisation through wolfram's Wii platform backend
-- [ ] Secure HTTPS connectivity to bsky.social (TLS/entropy backend)
+- [x] Secure HTTPS transport with CA validation and rotating entropy seed
+- [ ] Verify live HTTPS/login/timeline against bsky.social on Wii hardware
 - [x] GX rendering pipeline (framebuffer, 2D quads, textures)
 - [x] FreeType text rendering
 - [x] Login screen and atomic session persistence
