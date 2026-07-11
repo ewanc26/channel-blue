@@ -159,6 +159,10 @@ test:
 		tests/test_auth.c source/app/auth.c source/app/session_store.c \
 		-o build-host/test_auth
 	@build-host/test_auth
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_login.c source/app/login.c source/app/auth.c \
+		source/app/session_store.c -o build-host/test_login
+	@build-host/test_login
 	@cc -std=c11 -Wall -Wextra -Werror -Isource -I$(WOLFRAM_DIR)/include \
 		-I$(HOST_WOLFRAM_BUILD)/_deps/cjson-src \
 		tests/test_wolfram_backend.c source/integration/wolfram_backend.c \
