@@ -15,6 +15,7 @@ typedef enum {
     SCREEN_PROFILE,
     SCREEN_THREAD,
     SCREEN_COMPOSE,
+    SCREEN_LOGIN,
     SCREEN_COUNT,
 } screen_id_t;
 

@@ -20,6 +20,7 @@
 #include "app/auth.h"
 #include "app/timeline.h"
 #include "app/compose.h"
+#include "app/login.h"
 #include "integration/wolfram_backend.h"
 #include "render/font.h"
 #include "render/image.h"
@@ -106,6 +107,7 @@ int main(int argc, char **argv) {
     cb_auth auth;
     cb_auth_backend auth_backend;
     cb_timeline_backend backend;
+    cb_login_form login;
 
     /* --- video init --- */
     VIDEO_Init();
@@ -148,11 +150,13 @@ int main(int argc, char **argv) {
     backend = cb_wolfram_timeline_backend();
     cb_timeline_init(&timeline);
     cb_compose_init(&compose, 0);
+    cb_login_form_init(&login);
     if (sd_mounted)
         cb_auth_resume(&auth, &auth_backend, &wolfram,
                        "sd:/apps/channel-blue/session.dat");
-    nav_bind_timeline(&timeline, &compose,
-                      auth.state == CB_AUTH_READY ? &backend : NULL, &wolfram);
+    nav_bind_timeline(&timeline, &compose, &backend, &wolfram);
+    nav_bind_auth(&auth, &login, &auth_backend,
+                  "sd:/apps/channel-blue/session.dat");
 
     u32 fb = 0; /* current framebuffer index */
 

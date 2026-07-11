@@ -15,6 +15,10 @@ static cb_timeline *feed;
 static cb_compose *draft;
 static const cb_timeline_backend *feed_backend;
 static void *feed_context;
+static cb_auth *authentication;
+static cb_login_form *login_form;
+static const cb_auth_backend *authentication_backend;
+static const char *authentication_path;
 
 static void draw_quad(f32 x, f32 y, f32 w, f32 h, GXColor col) {
 	(void)col;
@@ -126,6 +130,45 @@ static void render_compose(void) {
 		               FONT_SIZE_HINTS, (GXColor){230, 120, 110, 255});
 }
 
+static void render_login_field(f32 y, const char *label, const char *value,
+	                           int selected, int secret) {
+	char masked[CB_LOGIN_PASSWORD_MAX + 1];
+	size_t length = value ? strlen(value) : 0;
+	if (secret) {
+		if (length > CB_LOGIN_PASSWORD_MAX) length = CB_LOGIN_PASSWORD_MAX;
+		memset(masked, '*', length);
+		masked[length] = '\0';
+		value = masked;
+	}
+	font_draw_text(54, y, label, FONT_SIZE_HINTS,
+	               selected ? (GXColor){80, 175, 235, 255}
+	                        : (GXColor){150, 150, 155, 255});
+	draw_quad(50, y + 24, 540, 38,
+	          selected ? (GXColor){25, 55, 75, 255} : (GXColor){28, 30, 36, 255});
+	draw_clipped_text(62, y + 33, value && value[0] ? value : "(empty)", 68,
+	                  (GXColor){225, 225, 228, 255});
+}
+
+static void render_login(void) {
+	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 12, 17, 255});
+	if (!login_form) return;
+	render_login_field(CONTENT_Y_TOP + 12, "PDS service", login_form->service,
+	                   login_form->active_field == CB_LOGIN_SERVICE, 0);
+	render_login_field(CONTENT_Y_TOP + 88, "Handle or email", login_form->identifier,
+	                   login_form->active_field == CB_LOGIN_IDENTIFIER, 0);
+	render_login_field(CONTENT_Y_TOP + 164, "App password", login_form->password,
+	                   login_form->active_field == CB_LOGIN_PASSWORD, 1);
+	font_draw_text(54, CONTENT_Y_TOP + 258,
+	               "Use an app password. It is never saved to SD.",
+	               FONT_SIZE_HINTS, (GXColor){140, 165, 180, 255});
+	if (login_form->last_status != CB_APP_OK)
+		font_draw_text(54, CONTENT_Y_TOP + 292,
+		               login_form->last_status == CB_APP_NOT_IMPLEMENTED
+		               ? "Wii HTTPS transport is not implemented yet."
+		               : "Sign-in failed. Check details/network and retry.",
+		               FONT_SIZE_HINTS, (GXColor){230, 120, 110, 255});
+}
+
 static void render_placeholder(screen_id_t screen) {
 	static const char *messages[] = {
 		"", "Search is not part of the first live-feed milestone.",
@@ -138,6 +181,7 @@ static void render_hints(screen_id_t screen) {
 	const char *hints = "D-pad: Move   A: Open   -: Compose   1/2: Like/Repost";
 	if (screen == SCREEN_THREAD) hints = "A: Reply   B: Back   1: Like   2: Repost";
 	else if (screen == SCREEN_COMPOSE) hints = "Enter/A: Send   B/Esc: Cancel   USB keyboard: Type";
+	else if (screen == SCREEN_LOGIN) hints = "Up/Down/Tab: Field   Enter/A: Sign in   USB keyboard: Type";
 	draw_quad(0, 480 - HINTS_BAR_HEIGHT, 640, HINTS_BAR_HEIGHT,
 	          (GXColor){20, 20, 20, 255});
 	draw_clipped_text(14, 480 - HINTS_BAR_HEIGHT + 4, hints, 80,
@@ -160,8 +204,31 @@ void nav_bind_timeline(cb_timeline *timeline, cb_compose *compose,
 	draft = compose;
 	feed_backend = backend;
 	feed_context = context;
-	if (feed && backend && backend->fetch_timeline)
-		cb_timeline_refresh(feed, backend, context);
+}
+
+void nav_bind_auth(cb_auth *auth, cb_login_form *login,
+	               const cb_auth_backend *backend, const char *session_path) {
+	authentication = auth;
+	login_form = login;
+	authentication_backend = backend;
+	authentication_path = session_path;
+	if (auth && auth->state == CB_AUTH_READY) {
+		if (feed && feed_backend && feed_backend->fetch_timeline)
+			cb_timeline_refresh(feed, feed_backend, feed_context);
+	} else {
+		nav_push(SCREEN_LOGIN);
+	}
+}
+
+static void submit_login(void) {
+	if (!login_form || !authentication || !authentication_backend ||
+	    !authentication_path) return;
+	if (cb_login_form_submit(login_form, authentication, authentication_backend,
+	                         feed_context, authentication_path) == CB_APP_OK) {
+		nav_pop();
+		if (feed && feed_backend && feed_backend->fetch_timeline)
+			cb_timeline_refresh(feed, feed_backend, feed_context);
+	}
 }
 
 void nav_handle_input(u32 pressed) {
@@ -172,7 +239,11 @@ void nav_handle_input(u32 pressed) {
 		if (pressed & WPAD_BUTTON_LEFT) nav.active_tab = (tab + TAB_COUNT - 1) % TAB_COUNT;
 		if (nav.active_tab != tab) return;
 	}
-	if (screen == SCREEN_COMPOSE) {
+	if (screen == SCREEN_LOGIN) {
+		if (pressed & WPAD_BUTTON_UP) cb_login_form_next_field(login_form, -1);
+		if (pressed & WPAD_BUTTON_DOWN) cb_login_form_next_field(login_form, 1);
+		if (pressed & WPAD_BUTTON_A) submit_login();
+	} else if (screen == SCREEN_COMPOSE) {
 		if (pressed & WPAD_BUTTON_A && draft &&
 		    cb_compose_submit(draft, feed, feed_backend, feed_context) == CB_APP_OK)
 			nav_pop();
@@ -208,6 +279,15 @@ void nav_handle_input(u32 pressed) {
 }
 
 void nav_handle_key(unsigned int symbol) {
+	if (nav_get_current_screen() == SCREEN_LOGIN && login_form) {
+		if (symbol == 8 || symbol == 127) cb_login_form_backspace(login_form);
+		else if (symbol == 9) cb_login_form_next_field(login_form, 1);
+		else if (symbol == 13) {
+			if (login_form->active_field == CB_LOGIN_PASSWORD) submit_login();
+			else cb_login_form_next_field(login_form, 1);
+		} else cb_login_form_insert(login_form, symbol);
+		return;
+	}
 	if (nav_get_current_screen() != SCREEN_COMPOSE || !draft) return;
 	if (symbol == 8 || symbol == 127) cb_compose_backspace(draft);
 	else if (symbol == 13) {
@@ -225,6 +305,7 @@ void nav_render(void) {
 	if (current == SCREEN_FEED) render_feed();
 	else if (current == SCREEN_THREAD) render_thread();
 	else if (current == SCREEN_COMPOSE) render_compose();
+	else if (current == SCREEN_LOGIN) render_login();
 	else render_placeholder(current);
 	render_hints(current);
 }
