@@ -17,7 +17,7 @@ include $(DEVKITPPC)/wii_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	channel-blue
 BUILD		:=	build
-SOURCES		:=	source source/navigation source/components source/render
+SOURCES		:=	source source/app source/navigation source/components source/render
 DATA		:=	data
 INCLUDES	:=
 
@@ -102,7 +102,7 @@ export OUTPUT	:=	$(CURDIR)/$(TARGET)
 VERSION		:=	$(shell git -C $(CURDIR) describe --tags 2>/dev/null || git -C $(CURDIR) rev-parse --short HEAD)
 DISTDIR		:=	/Volumes/Storage/Wii software
 
-.PHONY: $(BUILD) clean release
+.PHONY: $(BUILD) clean release test
 
 #---------------------------------------------------------------------------------
 $(BUILD):
@@ -126,6 +126,14 @@ release: $(OUTPUT).dol
 	@cp meta.xml "$(DISTDIR)/meta v$(VERSION).xml"
 	@cp icon.png "$(DISTDIR)/icon v$(VERSION).png"
 	@echo release: done "$(TARGET) v$(VERSION)"
+
+# Host-side tests cover pure application modules without requiring Wii hardware.
+test:
+	@mkdir -p build-host
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_session_store.c source/app/session_store.c \
+		-o build-host/test_session_store
+	@build-host/test_session_store
 
 #---------------------------------------------------------------------------------
 else
