@@ -7,8 +7,11 @@ your couch, using the Wiimote and a USB keyboard. Built on the
 [AT Protocol](https://atproto.com) via the
 [wolfram](https://github.com/ewan-croft/wolfram) C SDK.
 
-**Status:** Early development. The repo contains project scaffolding and
-metadata; no source code has been committed yet.
+**Status:** MVP integration in progress. The Wii UI, USB-keyboard sign-in and
+composition flows, bounded timeline controller, SD session persistence, image
+pipeline, and concrete wolfram adapter are implemented and cross-compile to a
+`.dol`. Live Bluesky access is still gated by wolfram's honest
+`WF_ERR_NOT_IMPLEMENTED` Wii HTTPS/TLS transport.
 
 ## Features
 
@@ -33,7 +36,6 @@ metadata; no source code has been committed yet.
 - [devkitPro](https://devkitpro.org/wiki/Getting_Started) toolchain
   (`devkitPPC`, `libogc`)
 - Portlibs installed via `dkp-pacman`:
-  - `mbedtls` (TLS for HTTPS)
   - `freetype` (font rendering)
   - `libpng` (image decoding)
   - `zlib` (compression)
@@ -44,10 +46,14 @@ metadata; no source code has been committed yet.
 
 ```sh
 # Install the devkitPro toolchain (https://devkitpro.org/wiki/Getting_Started)
-# Then install portlibs:
-sudo dkp-pacman -S wii-dev mbedtls freetype libpng zlib
+# Then install the Wii SDK and available portlibs:
+sudo dkp-pacman -S wii-dev ppc-freetype ppc-libpng ppc-zlib
 
-# Build libwolfram for PPC (see wolfram repo for instructions)
+# Build libwolfram and its declared cJSON/libcbor dependencies for PPC:
+cmake -S ../wolfram -B ../wolfram/build-wii \
+  -DCMAKE_TOOLCHAIN_FILE=../wolfram/.devdeps/wii.cmake \
+  -DWOLFRAM_BUILD_WII=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build ../wolfram/build-wii -j
 
 # Build Channel Blue
 make
@@ -83,11 +89,14 @@ Then launch **Channel Blue** from the Homebrew Channel.
 | D-pad Up/Down | Left stick | Scroll timeline |
 | A | A | Select / Open post |
 | B | B | Back / Cancel |
-| Plus | R trigger | Next page |
-| Minus | L trigger | Previous page |
+| Plus | R trigger | Load next page / refresh |
+| Minus | L trigger | Compose post |
+| 1 | X | Like selected post |
+| 2 | Y | Repost selected post |
 | Home | Start | Menu |
 
-A USB keyboard can be used to type post text.
+A USB keyboard is used for sign-in and post/reply text. Tab or Up/Down changes
+the active sign-in field; Enter submits. Passwords are masked and never saved.
 
 ## Dependencies
 
@@ -102,16 +111,18 @@ A USB keyboard can be used to type post text.
 
 ## Roadmap
 
-- [ ] Makefile and hello-world DOL
-- [ ] Cross-compile mbedTLS and libwolfram for PPC
-- [ ] WiFi init + HTTPS connectivity to bsky.social
-- [ ] GX rendering pipeline (framebuffer, 2D quads, textures)
-- [ ] FreeType bitmap font atlas
-- [ ] Login screen and session persistence
-- [ ] Timeline view with cursor pagination
-- [ ] Post composition via USB keyboard
-- [ ] Social actions (like, repost, follow)
-- [ ] Avatar thumbnails
+- [x] Makefile and Homebrew Channel DOL
+- [x] Cross-compile and link libwolfram for PPC
+- [x] WiFi initialisation through wolfram's Wii platform backend
+- [ ] Secure HTTPS connectivity to bsky.social (TLS/entropy backend)
+- [x] GX rendering pipeline (framebuffer, 2D quads, textures)
+- [x] FreeType text rendering
+- [x] Login screen and atomic session persistence
+- [x] Timeline UI/controller with bounded cursor pagination
+- [x] Post and reply composition via USB keyboard
+- [x] Wolfram-backed like, repost, and follow operations
+- [ ] Fetch and display avatar thumbnails
+- [ ] Replace placeholder search, notifications, and profile tabs
 - [ ] Error handling and WiFi retry logic
 
 ## Contributing

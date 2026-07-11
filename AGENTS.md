@@ -93,25 +93,33 @@ Channel Blue is a Bluesky client for the Nintendo Wii. It runs as a homebrew app
 
 ## Current state
 
-The project is in early development. The repository currently contains only the git skeleton; no source code has been committed yet. The immediate next steps are:
+The project is in MVP integration. It has a cross-compiling GX UI, FreeType
+text and image pipeline, bounded timeline/composition/auth controllers, atomic
+SD session persistence, USB keyboard input, and a concrete adapter to the
+cross-compiled wolfram SDK. The adapter and complete `.dol` link successfully.
+Live calls remain blocked by wolfram's honest Wii HTTPS transport stub. The
+immediate next steps are:
 
-1. Set up the devkitPro Makefile and verify a "hello world" DOL builds and runs on the Wii.
-2. Cross-compile `libwolfram` for PPC and link it into the project.
-3. Implement WiFi initialization (`net_init()`) and verify DNS resolution and HTTPS connectivity to `bsky.social`.
-4. Set up the GX rendering pipeline (framebuffer, viewport, basic 2D quad drawing).
-5. Implement a minimal XRPC client using `wolfram`'s `wf_xrpc_*` APIs over lwIP + mbedTLS.
-6. Build the authentication flow (`createSession` / `refreshSession`) and persist the session to SD card.
+1. Finish wolfram's secure Wii HTTPS transport, including a trustworthy entropy
+   source and CA validation; never substitute `rand()` or timing values.
+2. Verify login/session refresh and timeline calls on real Wii hardware.
+3. Fetch avatar bytes through wolfram and populate the existing fixed texture
+   cache.
+4. Replace the remaining search/notification/profile placeholders.
+5. Exercise post, reply, like, repost, and follow against a live PDS.
 
 ## Next planned work
 
-- [ ] Bootstrap: Makefile, hello-world DOL, SD card deployment
-- [ ] Cross-compile mbedTLS and libwolfram for PPC
-- [ ] WiFi init + HTTPS GET to bsky.social (verify TLS works)
-- [ ] GX rendering pipeline: framebuffer init, 2D quad drawing, texture upload
-- [ ] FreeType integration for bitmap font atlas
-- [ ] Session management UI (login screen, credential persistence on SD)
-- [ ] Timeline view (reverse-chronological feed with cursor-based pagination)
-- [ ] Post composition (text input via USB keyboard, submit via `createRecord`)
-- [ ] Social actions (like, repost, follow)
-- [ ] Avatar thumbnail rendering
+- [x] Bootstrap: Makefile, DOL, SD card deployment metadata
+- [x] Cross-compile and link libwolfram for PPC
+- [x] WiFi init via wolfram platform backend
+- [ ] Secure HTTPS GET to bsky.social (verify TLS and entropy on hardware)
+- [x] GX rendering pipeline: framebuffer, 2D drawing, texture upload
+- [x] FreeType text rendering
+- [x] Session management UI and atomic credential persistence
+- [x] Bounded timeline view with cursor pagination
+- [x] Post/reply composition with draft retention on failure
+- [x] Wolfram-backed social actions (like, repost, follow)
+- [ ] Avatar network fetch and thumbnail rendering
+- [ ] Search, notifications, and profile tabs
 - [ ] Error handling and retry logic for flaky WiFi
