@@ -138,6 +138,10 @@ test:
 		tests/test_timeline.c source/app/timeline.c \
 		-o build-host/test_timeline
 	@build-host/test_timeline
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_compose.c source/app/compose.c source/app/timeline.c \
+		-o build-host/test_compose
+	@build-host/test_compose
 
 #---------------------------------------------------------------------------------
 else
