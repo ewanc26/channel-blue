@@ -142,6 +142,10 @@ test:
 		tests/test_compose.c source/app/compose.c source/app/timeline.c \
 		-o build-host/test_compose
 	@build-host/test_compose
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_auth.c source/app/auth.c source/app/session_store.c \
+		-o build-host/test_auth
+	@build-host/test_auth
 
 #---------------------------------------------------------------------------------
 else
