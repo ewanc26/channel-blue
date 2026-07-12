@@ -9,8 +9,8 @@
 #define CB_COLOR_RAISED        (GXColor){38, 36, 30, 255}
 #define CB_COLOR_BORDER        (GXColor){66, 62, 51, 255}
 #define CB_COLOR_TEXT          (GXColor){255, 255, 255, 255}
-#define CB_COLOR_MUTED         (GXColor){255, 255, 255, 255, 255}
-#define CB_COLOR_DIM           (GXColor){255, 255, 255, 255, 255}
+#define CB_COLOR_MUTED         (GXColor){255, 255, 255, 255}
+#define CB_COLOR_DIM           (GXColor){255, 255, 255, 255}
 #define CB_COLOR_ACCENT        (GXColor){212, 160, 64, 255}
 #define CB_COLOR_ACCENT_HOVER  (GXColor){255, 255, 255, 255}
 #define CB_COLOR_ACCENT_SOFT   (GXColor){91, 72, 39, 255}
