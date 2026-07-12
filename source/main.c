@@ -107,7 +107,6 @@ static void gx_init(void) {
         GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
 
     GX_SetCullMode(GX_CULL_NONE);
-    GX_CopyDisp(frameBuffer[0], GX_TRUE);
     GX_SetDispCopyGamma(GX_GM_1_0);
 
     /* 2D orthographic projection — pixel coordinates map 1:1 */
@@ -253,6 +252,7 @@ int main(int argc, char **argv) {
         GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
         GX_SetColorUpdate(GX_TRUE);
         GX_CopyDisp(frameBuffer[fb], GX_TRUE);
+        GX_Flush();
         VIDEO_SetNextFramebuffer(frameBuffer[fb]);
         VIDEO_Flush();
         VIDEO_WaitVSync();
