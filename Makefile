@@ -214,6 +214,10 @@ test:
 		tests/test_profile.c source/app/profile.c \
 		-o build-host/test_profile
 	@build-host/test_profile
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_thread.c source/app/thread.c source/app/timeline.c \
+		-o build-host/test_thread
+	@build-host/test_thread
 	@cc -std=c11 -Wall -Wextra -Werror -Isource -I$(WOLFRAM_DIR)/include \
 		-I$(HOST_WOLFRAM_BUILD)/_deps/cjson-src \
 		tests/test_wolfram_backend.c source/integration/wolfram_backend.c \
