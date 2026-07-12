@@ -63,11 +63,17 @@ static cb_app_status export_session(cb_wolfram_context *context,
 
 void cb_wolfram_context_init(cb_wolfram_context *context) {
 	if (!context) return;
+	memset(context, 0, sizeof(*context));
 	wf_bsky_agent_init(&context->agent);
 }
 
 void cb_wolfram_context_free(cb_wolfram_context *context) {
 	if (context) wf_bsky_agent_free(&context->agent);
+}
+
+void cb_wolfram_context_set_network_ready(cb_wolfram_context *context,
+	                                       int ready) {
+	if (context) context->network_ready = ready != 0;
 }
 
 static cb_app_status backend_login(void *opaque, const char *service,
@@ -76,6 +82,7 @@ static cb_app_status backend_login(void *opaque, const char *service,
 	cb_wolfram_context *context = opaque;
 	wf_status status;
 	if (!context) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
 	status = wf_bsky_agent_login(&context->agent, service, identifier, password);
 	if (status != WF_OK) return status_from_wolfram(status);
 	return export_session(context, service, out);
@@ -87,6 +94,7 @@ static cb_app_status backend_resume(void *opaque, const cb_session_data *saved,
 	wf_session_data session = {0};
 	wf_status status;
 	if (!context || !saved) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
 	session.access_jwt = saved->access_jwt;
 	session.refresh_jwt = saved->refresh_jwt;
 	session.handle = saved->handle;
@@ -99,7 +107,8 @@ static cb_app_status backend_resume(void *opaque, const cb_session_data *saved,
 
 static cb_app_status backend_logout(void *opaque) {
 	cb_wolfram_context *context = opaque;
-	return context ? status_from_wolfram(wf_bsky_agent_logout(&context->agent))
+	return context && context->network_ready
+	             ? status_from_wolfram(wf_bsky_agent_logout(&context->agent))
 	               : CB_APP_INVALID;
 }
 
@@ -158,6 +167,7 @@ static cb_app_status backend_fetch(void *opaque, const char *cursor, size_t limi
 	wf_status status;
 	cb_app_status converted;
 	if (!context || !context->agent.agent) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
 	status = wf_bsky_agent_get_timeline(&context->agent, (int)limit, cursor, &feed);
 	if (status != WF_OK) return status_from_wolfram(status);
 	converted = cb_wolfram_convert_feed(&feed, out);
@@ -171,6 +181,7 @@ static cb_app_status backend_create(void *opaque, const char *text,
 	wf_agent_post_result result = {0};
 	wf_status status;
 	if (!context) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
 	status = reply
 	       ? wf_agent_reply(context->agent.agent, text, reply->uri, reply->cid, &result)
 	       : wf_bsky_agent_post(&context->agent, text, &result);
@@ -181,7 +192,7 @@ static cb_app_status backend_create(void *opaque, const char *text,
 static cb_app_status backend_like(void *opaque, const cb_post *post) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_post_result result = {0};
-	wf_status status = context
+	wf_status status = context && context->network_ready
 	                 ? wf_bsky_agent_like(&context->agent, post->uri, post->cid, &result)
 	                 : WF_ERR_INVALID_ARG;
 	wf_agent_post_result_free(&result);
@@ -191,7 +202,7 @@ static cb_app_status backend_like(void *opaque, const cb_post *post) {
 static cb_app_status backend_repost(void *opaque, const cb_post *post) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_post_result result = {0};
-	wf_status status = context
+	wf_status status = context && context->network_ready
 	                 ? wf_bsky_agent_repost(&context->agent, post->uri, post->cid, &result)
 	                 : WF_ERR_INVALID_ARG;
 	wf_agent_post_result_free(&result);
@@ -201,7 +212,7 @@ static cb_app_status backend_repost(void *opaque, const cb_post *post) {
 static cb_app_status backend_follow(void *opaque, const char *actor) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_post_result result = {0};
-	wf_status status = context
+	wf_status status = context && context->network_ready
 	                 ? wf_bsky_agent_follow(&context->agent, actor, &result)
 	                 : WF_ERR_INVALID_ARG;
 	wf_agent_post_result_free(&result);

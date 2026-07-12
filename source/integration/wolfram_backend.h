@@ -8,10 +8,13 @@
 
 typedef struct {
 	wf_bsky_agent agent;
+	int network_ready;
 } cb_wolfram_context;
 
 void cb_wolfram_context_init(cb_wolfram_context *context);
 void cb_wolfram_context_free(cb_wolfram_context *context);
+void cb_wolfram_context_set_network_ready(cb_wolfram_context *context,
+	                                       int ready);
 
 cb_auth_backend cb_wolfram_auth_backend(void);
 cb_timeline_backend cb_wolfram_timeline_backend(void);

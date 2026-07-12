@@ -11,6 +11,7 @@ typedef enum {
 	CB_APP_INVALID,
 	CB_APP_ALLOC,
 	CB_APP_NETWORK,
+	CB_APP_CONFIGURATION,
 	CB_APP_NOT_IMPLEMENTED
 } cb_app_status;
 
