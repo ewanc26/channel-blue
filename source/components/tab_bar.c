@@ -40,6 +40,7 @@ static const char *tab_labels[TAB_COUNT] = {
  * Vertices are emitted as a triangle list (6 indices for 2 triangles).
  */
 static void draw_quad(f32 x, f32 y, f32 w, f32 h, GXColor col) {
+    GX_SetChanMatColor(GX_COLOR0A0, col);
     GX_Begin(GX_TRIANGLES, GX_VTXFMT0, 6);
         GX_Position3f32(x,     y,     0.0f);
         GX_Position3f32(x + w, y,     0.0f);
