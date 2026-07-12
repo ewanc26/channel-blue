@@ -171,6 +171,18 @@ release: $(OUTPUT).dol
 test:
 	@mkdir -p build-host
 	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_utf8.c source/app/utf8.c \
+		-o build-host/test_utf8
+	@build-host/test_utf8
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_session_menu.c source/app/session_menu.c \
+		-o build-host/test_session_menu
+	@build-host/test_session_menu
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_input.c source/app/input.c \
+		-o build-host/test_input
+	@build-host/test_input
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
 		tests/test_entropy_seed.c source/app/entropy_seed.c \
 		-o build-host/test_entropy_seed
 	@build-host/test_entropy_seed
@@ -191,7 +203,7 @@ test:
 		-o build-host/test_timeline
 	@build-host/test_timeline
 	@cc -std=c99 -Wall -Wextra -Werror -Isource \
-		tests/test_compose.c source/app/compose.c source/app/timeline.c \
+		tests/test_compose.c source/app/compose.c source/app/utf8.c source/app/timeline.c \
 		-o build-host/test_compose
 	@build-host/test_compose
 	@cc -std=c99 -Wall -Wextra -Werror -Isource \
@@ -199,7 +211,7 @@ test:
 		-o build-host/test_auth
 	@build-host/test_auth
 	@cc -std=c99 -Wall -Wextra -Werror -Isource \
-		tests/test_login.c source/app/login.c source/app/auth.c \
+		tests/test_login.c source/app/login.c source/app/utf8.c source/app/auth.c \
 		source/app/session_store.c -o build-host/test_login
 	@build-host/test_login
 	@cc -std=c99 -Wall -Wextra -Werror -Isource \
@@ -207,7 +219,7 @@ test:
 		-o build-host/test_notifications
 	@build-host/test_notifications
 	@cc -std=c99 -Wall -Wextra -Werror -Isource \
-		tests/test_search.c source/app/search.c \
+		tests/test_search.c source/app/search.c source/app/utf8.c \
 		-o build-host/test_search
 	@build-host/test_search
 	@cc -std=c99 -Wall -Wextra -Werror -Isource \
@@ -222,7 +234,7 @@ test:
 		-I$(HOST_WOLFRAM_BUILD)/_deps/cjson-src \
 		tests/test_wolfram_backend.c source/integration/wolfram_backend.c \
 		source/app/auth.c source/app/session_store.c source/app/timeline.c \
-		source/app/retry.c source/app/notifications.c source/app/search.c \
+		source/app/retry.c source/app/notifications.c source/app/search.c source/app/utf8.c \
 		source/app/profile.c \
 		-L$(HOST_WOLFRAM_BUILD) -lwolfram \
 		-L$(HOST_WOLFRAM_BUILD)/_deps/cjson-build -lcjson \
