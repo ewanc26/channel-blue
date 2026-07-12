@@ -32,6 +32,12 @@ static int transient_when_nonzero(cb_retry_status status) {
     return status != 0;
 }
 
+/* Only a specific transient status class (7) is retryable; every other status
+ * -- including other non-zero codes -- is treated as fatal. */
+static int retry_only_seven(cb_retry_status status) {
+    return status == 7;
+}
+
 static unsigned recorded_backoff(int attempt) {
     g_backoff_attempts[g_sleep_calls] = attempt;
     g_backoff_values[g_sleep_calls] = (unsigned)(500u << attempt);
@@ -106,6 +112,30 @@ int main(void) {
                     recorded_backoff, NULL) == 3);
     assert(g_calls == 4);
     assert(g_sleep_calls == 0);
+
+    /* a status outside the retryable class is fatal on the first attempt */
+    reset();
+    script[0] = 5;
+    assert(cb_retry(3, retry_only_seven, scripted_op, script,
+                    recorded_backoff, recorded_sleep) == 5);
+    assert(g_calls == 1);
+    assert(g_sleep_calls == 0);
+
+    /* the specific class is retried, then a non-retryable status stops early */
+    reset();
+    script[0] = 7; script[1] = 4;
+    assert(cb_retry(3, retry_only_seven, scripted_op, script,
+                    recorded_backoff, recorded_sleep) == 4);
+    assert(g_calls == 2);
+    assert(g_sleep_calls == 1);
+
+    /* a fatal status mid-sequence aborts even while earlier attempts retried */
+    reset();
+    script[0] = 7; script[1] = 7; script[2] = 9;
+    assert(cb_retry(5, retry_only_seven, scripted_op, script,
+                    recorded_backoff, recorded_sleep) == 9);
+    assert(g_calls == 3);
+    assert(g_sleep_calls == 2);
 
     puts("retry tests passed");
     return 0;
