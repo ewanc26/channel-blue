@@ -124,7 +124,7 @@ DISTDIR		:=	/Volumes/Storage/Wii software
 
 BUNDLEDIR	:=	dist/apps/channel-blue
 
-.PHONY: $(BUILD) clean bundle dolphin release test
+.PHONY: $(BUILD) clean bundle dolphin release test verify
 
 #---------------------------------------------------------------------------------
 $(BUILD):
@@ -242,6 +242,12 @@ test:
 	@DYLD_LIBRARY_PATH=$(HOST_WOLFRAM_BUILD):$(HOST_WOLFRAM_BUILD)/_deps/cjson-build:$(HOST_WOLFRAM_BUILD)/_deps/libcbor-build/src \
 	 LD_LIBRARY_PATH=$(HOST_WOLFRAM_BUILD):$(HOST_WOLFRAM_BUILD)/_deps/cjson-build:$(HOST_WOLFRAM_BUILD)/_deps/libcbor-build/src \
 	 build-host/test_wolfram_backend
+
+# Run the complete host and cross-build gates used before deploying to Wii.
+verify:
+	@$(MAKE) --no-print-directory test
+	@$(MAKE) --no-print-directory -j4
+	@git diff --check
 
 #---------------------------------------------------------------------------------
 else
