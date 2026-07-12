@@ -7,18 +7,22 @@ your couch, using the Wiimote and a USB keyboard. Built on the
 [AT Protocol](https://atproto.com) via the
 [wolfram](https://github.com/ewan-croft/wolfram) C SDK.
 
-**Status:** MVP candidate. The Wii UI, USB-keyboard sign-in and composition
-flows, bounded timeline controller, SD session persistence, Wolfram adapter,
-and mbedTLS-backed Wii HTTPS transport are implemented and cross-compile to a
-`.dol`. The UI boots in Dolphin; live PDS login and TLS still require final
-verification on Wii hardware.
+**Status:** Wii-installable MVP. The Wii UI, USB-keyboard sign-in and
+composition flows, timeline and thread views, discovery tabs, avatar pipeline,
+SD session persistence, Wolfram adapter, and mbedTLS-backed Wii HTTPS transport
+are implemented and cross-compile to a `.dol`. The UI boots in Dolphin. Live
+PDS login, TLS, WiFi timing, and SD durability still require validation on real
+Wii hardware before calling the application production-ready.
 
 ## Features
 
 - Browse your home timeline (reverse-chronological feed)
 - Read individual posts and threads
 - Compose posts and replies (USB keyboard input)
-- Like, repost, and follow
+- Like/unlike, repost/unrepost, and follow
+- Search accounts and view notifications and your profile
+- Fetch and display author avatars
+- Fetch and display Wii-sized image, external, and video-thumbnail previews
 - Session persistence on SD card
 
 ## Requirements
@@ -117,20 +121,30 @@ contents of `dist/` to its root so `sd:/apps/channel-blue/entropy.bin` exists.
 Dolphin is useful for iteration, but final WiFi, clock, SD durability, and TLS
 testing must be performed on Wii hardware.
 
+### SystemWii template
+
+The project was checked against the
+[SystemWii homebrew template](https://github.com/systemwii/template). That
+template is a minimal console application built on devkitPPC/libogc; replacing
+Channel Blue with its demo source would remove the GX, Wolfram, networking, and
+controller code needed by this MVP. Channel Blue therefore retains the standard
+devkitPro `wii_rules` build used by its existing application while following the
+same core layout: a DOL target, libogc, and a `make`/`make run` workflow.
+
 Then launch **Channel Blue** from the Homebrew Channel.
 
 ## Controls
 
 | Wiimote | Classic Controller | Action |
 |---|---|---|
-| D-pad Up/Down | Left stick | Scroll timeline |
+| D-pad | D-pad / left stick | Navigate and scroll |
 | A | A | Select / Open post |
 | B | B | Back / Cancel |
-| Plus | R trigger | Load next page / refresh |
-| Minus | L trigger | Compose post |
-| 1 | X | Like selected post |
-| 2 | Y | Repost selected post |
-| Home | Start | Menu |
+| Plus | Plus / R trigger | Load next page / refresh |
+| Minus | Minus / L trigger | Compose post |
+| 1 | X | Like/unlike selected post |
+| 2 | Y | Repost/unrepost selected post |
+| Home | Home | Open session menu |
 
 A USB keyboard is used for sign-in and post/reply text. Tab or Up/Down changes
 the active sign-in field; Enter submits. Passwords are masked and never saved.
@@ -159,8 +173,9 @@ the active sign-in field; Enter submits. Passwords are masked and never saved.
 - [x] Timeline UI/controller with bounded cursor pagination
 - [x] Post and reply composition via USB keyboard
 - [x] Wolfram-backed like, repost, and follow operations
-- [ ] Fetch and display avatar thumbnails
-- [ ] Replace placeholder search, notifications, and profile tabs
+- [x] Fetch and display avatar thumbnails
+- [x] Fetch and display Wii-sized post media previews
+- [x] Search, notifications, and profile tabs backed by Wolfram
 - [x] Error handling and WiFi retry logic (bounded exponential backoff on transient errors)
 
 ## Contributing

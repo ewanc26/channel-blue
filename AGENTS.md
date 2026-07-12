@@ -102,10 +102,8 @@ complete `.dol` links and the UI boots in Dolphin. The immediate next steps are:
 
 1. Verify login/session refresh, TLS validation, and timeline calls on real Wii
    hardware.
-3. Fetch avatar bytes through wolfram and populate the existing fixed texture
-   cache.
-4. Replace the remaining search/notification/profile placeholders.
-5. Exercise post, reply, like, repost, and follow against a live PDS.
+3. Exercise post, reply, like, repost, follow, search, notifications, profile,
+   threads, and avatar fetching against a live PDS.
 
 ## Next planned work
 
@@ -120,6 +118,6 @@ complete `.dol` links and the UI boots in Dolphin. The immediate next steps are:
 - [x] Bounded timeline view with cursor pagination
 - [x] Post/reply composition with draft retention on failure
 - [x] Wolfram-backed social actions (like, repost, follow)
-- [ ] Avatar network fetch and thumbnail rendering
-- [ ] Search, notifications, and profile tabs
+- [x] Avatar network fetch and thumbnail rendering
+- [x] Search, notifications, and profile tabs
 - [x] Error handling and retry logic for flaky WiFi (bounded exponential backoff on transient errors)
