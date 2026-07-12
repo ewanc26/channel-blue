@@ -12,6 +12,9 @@
 #include "screens.h"
 #include "../app/compose.h"
 #include "../app/login.h"
+#include "../app/notifications.h"
+#include "../app/search.h"
+#include "../app/profile.h"
 
 /* layout constants (pixels) */
 #define TAB_BAR_HEIGHT    40
@@ -45,7 +48,17 @@ void nav_bind_timeline(cb_timeline *timeline, cb_compose *compose,
 /* Bind authentication after nav_bind_timeline. Signed-out users are routed to
  * the login screen; resumed users load the feed immediately. */
 void nav_bind_auth(cb_auth *auth, cb_login_form *login,
-                   const cb_auth_backend *backend, const char *session_path);
+                    const cb_auth_backend *backend, const char *session_path);
+
+/* Bind the discovery controllers (notifications / search / profile) and their
+ * transport adapters. The pointed-to objects must outlive the navigation loop.
+ * The context is the shared wolfram context already bound to the timeline. */
+void nav_bind_discovery(cb_notifications *notes, cb_search *search_ctrl,
+                        cb_profile *profile_ctrl,
+                        const cb_notifications_backend *notes_backend,
+                        const cb_search_backend *search_backend,
+                        const cb_profile_backend *profile_backend,
+                        void *context);
 
 /* handle one frame of input; called before render */
 void nav_handle_input(u32 pressed);
