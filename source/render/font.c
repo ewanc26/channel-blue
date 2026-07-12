@@ -199,6 +199,12 @@ static void setup_textured_vtx_fmt(void) {
     GX_SetVtxAttrFmt(VTXFMT_TEXTured, GX_VA_POS,  GX_POS_XY,  GX_S16,   0);
     GX_SetVtxAttrFmt(VTXFMT_TEXTured, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
     GX_SetVtxAttrFmt(VTXFMT_TEXTured, GX_VA_TEX0, GX_TEX_ST,  GX_F32,   0);
+
+    /* Text vertices carry their own colour. The 2D solid-quad path uses the
+     * material register, so leaving the channel there makes glyphs inherit
+     * whatever panel colour was drawn immediately beforehand. */
+    GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_VTX, GX_SRC_VTX,
+                   GX_LIGHTNULL, GX_DF_NONE, GX_AF_NONE);
 }
 
 /*
@@ -209,6 +215,8 @@ static void restore_position_only_vtx_fmt(void) {
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
 
 	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+	GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_REG, GX_SRC_REG,
+	               GX_LIGHTNULL, GX_DF_NONE, GX_AF_NONE);
 
     GX_SetNumTexGens(0);
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORDNULL, GX_TEXMAP_NULL, GX_COLOR0A0);
