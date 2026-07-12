@@ -38,12 +38,69 @@ static int set_string(char **out, const char *value, int required) {
 	return *out || (!required && !value);
 }
 
+static void post_root_ref(const cJSON *record, const char *post_uri,
+	                      const char *post_cid, const char **root_uri,
+	                      const char **root_cid) {
+	cJSON *reply;
+	cJSON *root;
+	cJSON *uri;
+	cJSON *cid;
+	*root_uri = post_uri;
+	*root_cid = post_cid;
+	if (!record) return;
+	reply = cJSON_GetObjectItemCaseSensitive(record, "reply");
+	root = cJSON_IsObject(reply)
+	     ? cJSON_GetObjectItemCaseSensitive(reply, "root") : NULL;
+	uri = cJSON_IsObject(root)
+	    ? cJSON_GetObjectItemCaseSensitive(root, "uri") : NULL;
+	cid = cJSON_IsObject(root)
+	    ? cJSON_GetObjectItemCaseSensitive(root, "cid") : NULL;
+	if (cJSON_IsString(uri) && uri->valuestring &&
+	    cJSON_IsString(cid) && cid->valuestring) {
+		*root_uri = uri->valuestring;
+		*root_cid = cid->valuestring;
+	}
+}
+
+/* Return the first CDN-sized image URL exposed by a post view embed. The
+ * typed Wolfram parser deliberately keeps embeds as cJSON because the union
+ * evolves; this small extractor keeps Channel Blue's media surface bounded. */
+static const char *embed_media_url(const cJSON *embed) {
+	const cJSON *type;
+	const cJSON *items;
+	const cJSON *item;
+	const cJSON *url;
+	if (!cJSON_IsObject(embed)) return NULL;
+	type = cJSON_GetObjectItemCaseSensitive(embed, "$type");
+	if (!cJSON_IsString(type) || !type->valuestring) return NULL;
+	if (strcmp(type->valuestring, "app.bsky.embed.recordWithMedia#view") == 0) {
+		return embed_media_url(cJSON_GetObjectItemCaseSensitive(embed, "media"));
+	}
+	if (strcmp(type->valuestring, "app.bsky.embed.images#view") == 0 ||
+	    strcmp(type->valuestring, "app.bsky.embed.gallery#view") == 0) {
+		items = cJSON_GetObjectItemCaseSensitive(embed, "images");
+		if (!cJSON_IsArray(items)) return NULL;
+		item = cJSON_GetArrayItem(items, 0);
+		if (!cJSON_IsObject(item)) return NULL;
+		url = cJSON_GetObjectItemCaseSensitive(item, "thumb");
+		if (!cJSON_IsString(url) || !url->valuestring)
+			url = cJSON_GetObjectItemCaseSensitive(item, "fullsize");
+		return cJSON_IsString(url) ? url->valuestring : NULL;
+	}
+	if (strcmp(type->valuestring, "app.bsky.embed.external#view") == 0 ||
+	    strcmp(type->valuestring, "app.bsky.embed.video#view") == 0) {
+		url = cJSON_GetObjectItemCaseSensitive(embed, "thumb");
+		return cJSON_IsString(url) ? url->valuestring : NULL;
+	}
+	return NULL;
+}
+
 static cb_app_status session_from_wolfram(const wf_session_data *source,
 	                                      const char *fallback_service,
 	                                      cb_session_data *out) {
-	memset(out, 0, sizeof(*out));
-	if (!source || !source->access_jwt || !source->refresh_jwt ||
+	if (!source || !out || !source->access_jwt || !source->refresh_jwt ||
 	    !source->handle || !source->did) return CB_APP_INVALID;
+	memset(out, 0, sizeof(*out));
 	if (!set_string(&out->service,
 	                source->pds_url ? source->pds_url : fallback_service, 1) ||
 	    !set_string(&out->access_jwt, source->access_jwt, 1) ||
@@ -60,8 +117,10 @@ static cb_app_status export_session(cb_wolfram_context *context,
 	                                const char *fallback_service,
 	                                cb_session_data *out) {
 	wf_session_data session = {0};
-	wf_status status = wf_agent_get_session_data(context->agent.agent, &session);
+	wf_status status;
 	cb_app_status converted;
+	if (!context || !out) return CB_APP_INVALID;
+	status = wf_agent_get_session_data(context->agent.agent, &session);
 	if (status != WF_OK) return status_from_wolfram(status);
 	converted = session_from_wolfram(&session, fallback_service, out);
 	wf_agent_session_data_free(&session);
@@ -130,9 +189,11 @@ static cb_app_status backend_login(void *opaque, const char *service,
 	                               const char *identifier, const char *password,
 	                               cb_session_data *out) {
 	cb_wolfram_context *context = opaque;
-	login_ctx lc = {&context->agent, service, identifier, password};
+	login_ctx lc;
 	wf_status status;
-	if (!context) return CB_APP_INVALID;
+	if (!context || !service || !identifier || !password || !out)
+		return CB_APP_INVALID;
+	lc = (login_ctx){&context->agent, service, identifier, password};
 	if (!context->network_ready) return CB_APP_NETWORK;
 	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
 	                             login_op, &lc, cb_network_backoff_ms,
@@ -146,7 +207,7 @@ static cb_app_status backend_resume(void *opaque, const cb_session_data *saved,
 	cb_wolfram_context *context = opaque;
 	wf_session_data session = {0};
 	wf_status status;
-	if (!context || !saved) return CB_APP_INVALID;
+	if (!context || !saved || !out) return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
 	session.access_jwt = saved->access_jwt;
 	session.refresh_jwt = saved->refresh_jwt;
@@ -183,25 +244,37 @@ cb_app_status cb_wolfram_convert_feed(const wf_agent_feed_list *feed,
 	}
 	for (i = 0; i < out->count; i++) {
 		const wf_agent_post_view *source = &feed->items[i].post;
+		const char *root_uri;
+		const char *root_cid;
+		const char *media_url;
 		cJSON *text = source->record
 		            ? cJSON_GetObjectItemCaseSensitive(source->record, "text") : NULL;
 		cb_post *post = &out->posts[i];
+		post_root_ref(source->record, source->uri, source->cid,
+		              &root_uri, &root_cid);
+		media_url = embed_media_url(source->embed);
 		if (!source->uri || !source->cid || !source->author.handle ||
 		    !cJSON_IsString(text) || !text->valuestring ||
 		    !set_string(&post->uri, source->uri, 1) ||
 		    !set_string(&post->cid, source->cid, 1) ||
+		    !set_string(&post->root_uri, root_uri, 1) ||
+		    !set_string(&post->root_cid, root_cid, 1) ||
 		    !set_string(&post->author, source->author.handle, 1) ||
+		    !set_string(&post->author_did, source->author.did, 1) ||
 		    !set_string(&post->display_name, source->author.display_name, 0) ||
 		    !set_string(&post->text, text->valuestring, 1) ||
-		    !set_string(&post->avatar_url, source->author.avatar, 0)) {
+		    !set_string(&post->avatar_url, source->author.avatar, 0) ||
+		    !set_string(&post->media_url, media_url, 0) ||
+		    !set_string(&post->like_uri, source->viewer.like, 0) ||
+		    !set_string(&post->repost_uri, source->viewer.repost, 0)) {
 			cb_timeline_page_free(out);
 			return CB_APP_INVALID;
 		}
 		post->reply_count = source->reply_count > 0 ? (unsigned)source->reply_count : 0;
 		post->repost_count = source->repost_count > 0 ? (unsigned)source->repost_count : 0;
 		post->like_count = source->like_count > 0 ? (unsigned)source->like_count : 0;
-		post->liked = source->viewer.like != NULL;
-		post->reposted = source->viewer.repost != NULL;
+		post->liked = post->like_uri != NULL;
+		post->reposted = post->repost_uri != NULL;
 	}
 	if (feed->cursor) {
 		out->cursor = copy(feed->cursor);
@@ -230,11 +303,12 @@ static cb_app_status backend_fetch(void *opaque, const char *cursor, size_t limi
 	                               cb_timeline_page *out) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_feed_list feed = {0};
-	fetch_ctx fc = {&context->agent, (int)limit, cursor, &feed};
+	fetch_ctx fc;
 	wf_status status;
 	cb_app_status converted;
 	if (!context || !context->agent.agent) return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
+	fc = (fetch_ctx){&context->agent, (int)limit, cursor, &feed};
 	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
 	                             fetch_timeline_op, &fc, cb_network_backoff_ms,
 	                             cb_network_sleep_ms);
@@ -252,37 +326,71 @@ static cb_app_status backend_create(void *opaque, const char *text,
 	if (!context) return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
 	status = reply
-	       ? wf_agent_reply(context->agent.agent, text, reply->uri, reply->cid, &result)
+	       ? wf_agent_reply_refs(context->agent.agent, text,
+	                             reply->root_uri, reply->root_cid,
+	                             reply->uri, reply->cid, &result)
 	       : wf_bsky_agent_post(&context->agent, text, &result);
 	wf_agent_post_result_free(&result);
 	return status_from_wolfram(status);
 }
 
-static cb_app_status backend_like(void *opaque, const cb_post *post) {
+static cb_app_status backend_toggle_like(void *opaque, cb_post *post) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_post_result result = {0};
-	wf_status status = context && context->network_ready
-	                 ? wf_bsky_agent_like(&context->agent, post->uri, post->cid, &result)
-	                 : WF_ERR_INVALID_ARG;
+	wf_status status;
+	if (!context || !post) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
+	if (post->liked) {
+		if (!post->like_uri) return CB_APP_INVALID;
+		status = wf_agent_unlike(context->agent.agent, post->like_uri);
+		if (status == WF_OK) {
+			free(post->like_uri);
+			post->like_uri = NULL;
+			post->liked = 0;
+		}
+	} else {
+		status = wf_bsky_agent_like(&context->agent, post->uri, post->cid, &result);
+		if (status == WF_OK && result.uri) {
+			post->like_uri = result.uri;
+			result.uri = NULL;
+			post->liked = 1;
+		} else if (status == WF_OK) status = WF_ERR_PARSE;
+	}
 	wf_agent_post_result_free(&result);
 	return status_from_wolfram(status);
 }
 
-static cb_app_status backend_repost(void *opaque, const cb_post *post) {
+static cb_app_status backend_toggle_repost(void *opaque, cb_post *post) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_post_result result = {0};
-	wf_status status = context && context->network_ready
-	                 ? wf_bsky_agent_repost(&context->agent, post->uri, post->cid, &result)
-	                 : WF_ERR_INVALID_ARG;
+	wf_status status;
+	if (!context || !post) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
+	if (post->reposted) {
+		if (!post->repost_uri) return CB_APP_INVALID;
+		status = wf_agent_delete_repost(context->agent.agent, post->repost_uri);
+		if (status == WF_OK) {
+			free(post->repost_uri);
+			post->repost_uri = NULL;
+			post->reposted = 0;
+		}
+	} else {
+		status = wf_bsky_agent_repost(&context->agent, post->uri, post->cid, &result);
+		if (status == WF_OK && result.uri) {
+			post->repost_uri = result.uri;
+			result.uri = NULL;
+			post->reposted = 1;
+		} else if (status == WF_OK) status = WF_ERR_PARSE;
+	}
 	wf_agent_post_result_free(&result);
 	return status_from_wolfram(status);
 }
 
-static cb_app_status backend_follow(void *opaque, const char *actor) {
+static cb_app_status backend_follow(void *opaque, const char *actor_did) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_post_result result = {0};
 	wf_status status = context && context->network_ready
-	                 ? wf_bsky_agent_follow(&context->agent, actor, &result)
+	                 ? wf_bsky_agent_follow(&context->agent, actor_did, &result)
 	                 : WF_ERR_INVALID_ARG;
 	wf_agent_post_result_free(&result);
 	return status_from_wolfram(status);
@@ -290,7 +398,8 @@ static cb_app_status backend_follow(void *opaque, const char *actor) {
 
 cb_timeline_backend cb_wolfram_timeline_backend(void) {
 	cb_timeline_backend backend = {
-		backend_fetch, backend_create, backend_like, backend_repost, backend_follow
+		backend_fetch, backend_create, backend_toggle_like,
+		backend_toggle_repost, backend_follow
 	};
 	return backend;
 }
@@ -303,6 +412,8 @@ cb_timeline_backend cb_wolfram_timeline_backend(void) {
  * client never attaches auth, and wf_http_get ignores the client's base URL
  * (it is given a complete URL), so any HTTPS origin works through one client. */
 #define CB_AVATAR_CLIENT_BASE "https://cdn.bsky.app"
+/* Keep compressed media plus decode buffers within the Wii's usable heap. */
+#define CB_MEDIA_RESPONSE_MAX (4u * 1024u * 1024u)
 
 typedef struct {
 	wf_xrpc_client *client;
@@ -322,6 +433,10 @@ static cb_retry_status avatar_fetch_op(void *ctx) {
 		wf_response_free(&resp);
 		return (cb_retry_status)WF_ERR_UNKNOWN;
 	}
+	if (resp.body_len > CB_MEDIA_RESPONSE_MAX) {
+		wf_response_free(&resp);
+		return (cb_retry_status)WF_ERR_INVALID_ARG;
+	}
 	c->resp = resp;
 	c->captured = 1;
 	return (cb_retry_status)WF_OK;
@@ -336,6 +451,8 @@ cb_app_status cb_wolfram_fetch_avatar(cb_wolfram_context *context,
 	unsigned char *buf;
 
 	if (!context || !avatar_url || !out_bytes || !out_len)
+		return CB_APP_INVALID;
+	if (strncmp(avatar_url, "https://", 8) != 0)
 		return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
 
@@ -385,6 +502,7 @@ cb_app_status cb_wolfram_convert_notifications(
 		size_t rlen;
 		if (!set_string(&note->uri, src->uri, 1) ||
 		    !set_string(&note->cid, src->cid, 1) ||
+		    !set_string(&note->reason_subject, src->reason_subject, 0) ||
 		    !set_string(&note->author, src->author.handle, 1) ||
 		    !set_string(&note->display_name, src->author.display_name, 0) ||
 		    !set_string(&note->avatar_url, src->author.avatar, 0) ||
@@ -444,19 +562,21 @@ cb_app_status cb_wolfram_convert_search(const wf_agent_actor_list *source,
 
 cb_app_status cb_wolfram_convert_profile(const wf_agent_profile *source,
 	                                 cb_profile_data *out) {
+	if (!source || !out || !source->did || !source->handle) return CB_APP_INVALID;
 	memset(out, 0, sizeof(*out));
-	if (!source || !source->did || !source->handle) return CB_APP_INVALID;
 	if (!set_string(&out->did, source->did, 1) ||
 	    !set_string(&out->handle, source->handle, 1) ||
 	    !set_string(&out->display_name, source->display_name, 0) ||
 	    !set_string(&out->description, source->description, 0) ||
-	    !set_string(&out->avatar_url, source->avatar_cid, 0)) {
+	    !set_string(&out->avatar_url, source->avatar_cid, 0) ||
+	    !set_string(&out->following_uri, source->following, 0)) {
 		cb_profile_data_free(out);
 		return CB_APP_ALLOC;
 	}
 	out->followers_count = source->followers_count;
 	out->follows_count = source->follows_count;
 	out->posts_count = source->posts_count;
+	out->followed = out->following_uri != NULL;
 	return CB_APP_OK;
 }
 
@@ -469,25 +589,37 @@ cb_app_status cb_wolfram_convert_profile(const wf_agent_profile *source,
 
 static cb_app_status convert_thread_post(const wf_agent_thread_post *source,
 	                                 cb_post *post) {
+	const char *root_uri;
+	const char *root_cid;
+	const char *media_url;
 	cJSON *text = source->record
 	            ? cJSON_GetObjectItemCaseSensitive(source->record, "text") : NULL;
 	memset(post, 0, sizeof(*post));
+	post_root_ref(source->record, source->uri, source->cid,
+	              &root_uri, &root_cid);
+	media_url = embed_media_url(source->embed);
 	if (!source->uri || !source->cid || !source->author.handle ||
 	    !cJSON_IsString(text) || !text->valuestring ||
 	    !set_string(&post->uri, source->uri, 1) ||
 	    !set_string(&post->cid, source->cid, 1) ||
+	    !set_string(&post->root_uri, root_uri, 1) ||
+	    !set_string(&post->root_cid, root_cid, 1) ||
 	    !set_string(&post->author, source->author.handle, 1) ||
+	    !set_string(&post->author_did, source->author.did, 1) ||
 	    !set_string(&post->display_name, source->author.display_name, 0) ||
 	    !set_string(&post->text, text->valuestring, 1) ||
-	    !set_string(&post->avatar_url, source->author.avatar, 0)) {
+	    !set_string(&post->avatar_url, source->author.avatar, 0) ||
+	    !set_string(&post->media_url, media_url, 0) ||
+	    !set_string(&post->like_uri, source->viewer_like, 0) ||
+	    !set_string(&post->repost_uri, source->viewer_repost, 0)) {
 		cb_post_free(post);
 		return CB_APP_INVALID;
 	}
 	post->reply_count = source->reply_count > 0 ? (unsigned)source->reply_count : 0;
 	post->repost_count = source->repost_count > 0 ? (unsigned)source->repost_count : 0;
 	post->like_count = source->like_count > 0 ? (unsigned)source->like_count : 0;
-	post->liked = 0;
-	post->reposted = 0;
+	post->liked = post->like_uri != NULL;
+	post->reposted = post->repost_uri != NULL;
 	return CB_APP_OK;
 }
 
@@ -501,20 +633,24 @@ static void thread_emit_post(const wf_agent_thread_node *node,
 
 /* Emit the parent chain above `node`, oldest ancestor first. */
 static void thread_emit_ancestors(const wf_agent_thread_node *node,
-	                          cb_timeline_page *out, size_t *idx) {
+	                          cb_timeline_page *out, size_t *idx,
+	                          unsigned depth) {
 	if (!node || !node->parent) return;
-	thread_emit_ancestors(node->parent, out, idx);
+	if (depth >= CB_THREAD_DEPTH) return;
+	thread_emit_ancestors(node->parent, out, idx, depth + 1);
 	thread_emit_post(node->parent, out, idx);
 }
 
 /* Depth-first emit of a node's replies subtree (node itself is not emitted). */
 static void thread_emit_replies(const wf_agent_thread_node *node,
-	                        cb_timeline_page *out, size_t *idx) {
+	                        cb_timeline_page *out, size_t *idx,
+	                        unsigned depth) {
 	size_t i;
+	if (!node || depth >= CB_THREAD_DEPTH) return;
 	for (i = 0; i < node->replies_count; i++) {
 		const wf_agent_thread_node *reply = &node->replies[i];
 		thread_emit_post(reply, out, idx);
-		thread_emit_replies(reply, out, idx);
+		thread_emit_replies(reply, out, idx, depth + 1);
 	}
 }
 
@@ -527,9 +663,9 @@ cb_app_status cb_wolfram_convert_thread(const wf_agent_thread *source,
 		out->posts = calloc(CB_TIMELINE_CAPACITY, sizeof(*out->posts));
 		if (!out->posts) return CB_APP_ALLOC;
 	}
-	thread_emit_ancestors(&source->root, out, &idx);
+	thread_emit_ancestors(&source->root, out, &idx, 0);
 	thread_emit_post(&source->root, out, &idx);
-	thread_emit_replies(&source->root, out, &idx);
+	thread_emit_replies(&source->root, out, &idx, 0);
 	out->count = idx;
 	if (out->count == 0) {
 		cb_timeline_page_free(out);
@@ -563,11 +699,12 @@ static cb_app_status backend_notifications_fetch(void *opaque,
 	                                         cb_notifications_page *out) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_notification_list list = {0};
-	notifications_ctx nc = {&context->agent, (int)limit, cursor, &list};
+	notifications_ctx nc;
 	wf_status status;
 	cb_app_status converted;
 	if (!context || !context->agent.agent) return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
+	nc = (notifications_ctx){&context->agent, (int)limit, cursor, &list};
 	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
 	                             fetch_notifications_op, &nc, cb_network_backoff_ms,
 	                             cb_network_sleep_ms);
@@ -575,6 +712,31 @@ static cb_app_status backend_notifications_fetch(void *opaque,
 	converted = cb_wolfram_convert_notifications(&list, out);
 	wf_agent_notification_list_free(&list);
 	return converted;
+}
+
+typedef struct {
+	wf_bsky_agent *agent;
+	const char *seen_at;
+} seen_ctx;
+
+static cb_retry_status seen_op(void *value) {
+	seen_ctx *ctx = value;
+	return (cb_retry_status)wf_agent_update_seen_notifications(
+		ctx->agent->agent, ctx->seen_at);
+}
+
+static cb_app_status backend_notifications_mark_seen(void *opaque,
+	                                               const char *seen_at) {
+	cb_wolfram_context *context = opaque;
+	seen_ctx sc;
+	wf_status status;
+	if (!context || !seen_at || !seen_at[0]) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
+	sc = (seen_ctx){&context->agent, seen_at};
+	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
+	                             seen_op, &sc, cb_network_backoff_ms,
+	                             cb_network_sleep_ms);
+	return status_from_wolfram(status);
 }
 
 typedef struct {
@@ -596,11 +758,12 @@ static cb_app_status backend_search_fetch(void *opaque, const char *query,
 	                                  size_t limit, cb_search_page *out) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_actor_list list = {0};
-	search_ctx sc = {&context->agent, query, (int)limit, NULL, &list};
+	search_ctx sc;
 	wf_status status;
 	cb_app_status converted;
 	if (!context || !context->agent.agent) return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
+	sc = (search_ctx){&context->agent, query, (int)limit, NULL, &list};
 	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
 	                             search_actors_op, &sc, cb_network_backoff_ms,
 	                             cb_network_sleep_ms);
@@ -626,11 +789,12 @@ static cb_app_status backend_profile_fetch(void *opaque, const char *actor,
 	                               cb_profile_data *out) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_profile profile = {0};
-	profile_ctx pc = {&context->agent, actor, &profile};
+	profile_ctx pc;
 	wf_status status;
 	cb_app_status converted;
 	if (!context || !context->agent.agent) return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
+	pc = (profile_ctx){&context->agent, actor, &profile};
 	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
 	                             fetch_profile_op, &pc, cb_network_backoff_ms,
 	                             cb_network_sleep_ms);
@@ -640,8 +804,37 @@ static cb_app_status backend_profile_fetch(void *opaque, const char *actor,
 	return converted;
 }
 
+static cb_app_status backend_profile_toggle_follow(void *opaque,
+	                                            cb_profile_data *profile) {
+	cb_wolfram_context *context = opaque;
+	wf_agent_post_result result = {0};
+	wf_status status;
+	if (!context || !profile || !profile->did) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
+	if (profile->followed) {
+		if (!profile->following_uri) return CB_APP_INVALID;
+		status = wf_agent_unfollow(context->agent.agent, profile->following_uri);
+		if (status == WF_OK) {
+			free(profile->following_uri);
+			profile->following_uri = NULL;
+			profile->followed = 0;
+		}
+	} else {
+		status = wf_bsky_agent_follow(&context->agent, profile->did, &result);
+		if (status == WF_OK && result.uri) {
+			profile->following_uri = result.uri;
+			result.uri = NULL;
+			profile->followed = 1;
+		} else if (status == WF_OK) status = WF_ERR_PARSE;
+	}
+	wf_agent_post_result_free(&result);
+	return status_from_wolfram(status);
+}
+
 cb_notifications_backend cb_wolfram_notifications_backend(void) {
-	cb_notifications_backend backend = {backend_notifications_fetch};
+	cb_notifications_backend backend = {
+		backend_notifications_fetch, backend_notifications_mark_seen
+	};
 	return backend;
 }
 
@@ -662,12 +855,13 @@ static cb_app_status backend_thread_fetch(void *opaque, const char *uri,
 	                                  size_t limit, cb_timeline_page *out) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_thread tree = {0};
-	thread_ctx tc = {&context->agent, uri, CB_THREAD_DEPTH, &tree};
+	thread_ctx tc;
 	wf_status status;
 	cb_app_status converted;
 	(void)limit;
 	if (!context || !context->agent.agent) return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
+	tc = (thread_ctx){&context->agent, uri, CB_THREAD_DEPTH, &tree};
 	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
 	                             fetch_thread_op, &tc, cb_network_backoff_ms,
 	                             cb_network_sleep_ms);
@@ -679,7 +873,8 @@ static cb_app_status backend_thread_fetch(void *opaque, const char *uri,
 
 cb_thread_backend cb_wolfram_thread_backend(void) {
 	cb_thread_backend backend = {
-		backend_thread_fetch, backend_like, backend_repost, backend_follow
+		backend_thread_fetch, backend_toggle_like,
+		backend_toggle_repost, backend_follow
 	};
 	return backend;
 }
@@ -690,6 +885,8 @@ cb_search_backend cb_wolfram_search_backend(void) {
 }
 
 cb_profile_backend cb_wolfram_profile_backend(void) {
-	cb_profile_backend backend = {backend_profile_fetch};
+	cb_profile_backend backend = {
+		backend_profile_fetch, backend_profile_toggle_follow
+	};
 	return backend;
 }
