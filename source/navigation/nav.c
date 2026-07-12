@@ -60,12 +60,15 @@ static void keyboard_render(void) {
 	if (nav_get_current_screen() != SCREEN_LOGIN &&
 	    nav_get_current_screen() != SCREEN_SEARCH &&
 	    nav_get_current_screen() != SCREEN_COMPOSE) return;
+	/* Own the lower panel so status text and navigation hints cannot show
+	 * through the keyboard. */
+	draw_quad(0.0f, 290.0f, 640.0f, 190.0f, CB_COLOR_SURFACE_DEEP);
 	for (row = 0; row < 4; row++) {
 		int len = (int)strlen(keyboard_rows[row]);
 		int col;
 		f32 key_w = 54.0f;
 		f32 start_x = (640.0f - key_w * len) * 0.5f;
-		f32 y = 306.0f + row * 35.0f;
+		f32 y = 304.0f + row * 35.0f;
 		for (col = 0; col < len; col++) {
 			char label[2] = { keyboard_rows[row][col], '\0' };
 			GXColor bg = CB_COLOR_RAISED;
@@ -138,7 +141,7 @@ void nav_pointer_update(f32 x, f32 y, int valid, int clicked) {
 		int len = (int)strlen(keyboard_rows[row]);
 		f32 key_w = 54.0f;
 		f32 start_x = (640.0f - key_w * len) * 0.5f;
-		f32 ky = 306.0f + row * 35.0f;
+		f32 ky = 304.0f + row * 35.0f;
 		if (pointer_y < ky || pointer_y >= ky + 30.0f) continue;
 		col = (int)((pointer_x - start_x) / key_w);
 		if (col >= 0 && col < len)
@@ -872,7 +875,9 @@ void nav_render(void) {
 	else if (current == SCREEN_SESSION_MENU) render_session_menu();
 	else render_placeholder(current);
 	keyboard_render();
-	render_hints(current);
+	if (current != SCREEN_LOGIN && current != SCREEN_SEARCH &&
+	    current != SCREEN_COMPOSE)
+		render_hints(current);
 	pointer_render();
 }
 
