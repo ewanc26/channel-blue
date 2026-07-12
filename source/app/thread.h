@@ -18,9 +18,9 @@
 typedef struct {
 	cb_app_status (*fetch_thread)(void *context, const char *uri,
 	                              size_t limit, cb_timeline_page *out);
-	cb_app_status (*like)(void *context, const cb_post *post);
-	cb_app_status (*repost)(void *context, const cb_post *post);
-	cb_app_status (*follow)(void *context, const char *actor);
+	cb_app_status (*toggle_like)(void *context, cb_post *post);
+	cb_app_status (*toggle_repost)(void *context, cb_post *post);
+	cb_app_status (*follow)(void *context, const char *actor_did);
 } cb_thread_backend;
 
 typedef struct {

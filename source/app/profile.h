@@ -10,9 +10,10 @@ typedef struct {
 	char *handle;
 	char *display_name;
 	char *description;
-	/* wolfram returns the avatar as a blob CID, not a URL; avatar bytes are
-	 * not yet fetched to a texture (see roadmap item: avatar network fetch). */
+	/* Profile-view avatar URL returned by the PDS. */
 	char *avatar_url;
+	char *following_uri;  /* viewer's follow record URI; NULL when not followed */
+	int followed;
 	int followers_count;
 	int follows_count;
 	int posts_count;
@@ -21,6 +22,7 @@ typedef struct {
 typedef struct {
 	cb_app_status (*fetch_profile)(void *context, const char *actor,
 	                               cb_profile_data *out);
+	cb_app_status (*toggle_follow)(void *context, cb_profile_data *profile);
 } cb_profile_backend;
 
 typedef struct {
@@ -38,5 +40,8 @@ void cb_profile_free(cb_profile *controller);
 cb_app_status cb_profile_load(cb_profile *controller,
 	                         const cb_profile_backend *backend, void *context,
 	                         const char *actor);
+cb_app_status cb_profile_toggle_follow(cb_profile *controller,
+	                                  const cb_profile_backend *backend,
+	                                  void *context);
 
 #endif /* CHANNEL_BLUE_PROFILE_H */

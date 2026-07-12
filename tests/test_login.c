@@ -78,6 +78,10 @@ int main(void) {
 	assert(cb_login_form_insert(&form, 'a') == CB_APP_OK);
 	cb_login_form_backspace(&form);
 	assert(form.identifier_length == strlen(identifier));
+	assert(cb_login_form_insert(&form, 0x00e9) == CB_APP_OK);
+	assert(form.identifier_length == strlen(identifier) + 2);
+	cb_login_form_backspace(&form);
+	assert(form.identifier_length == strlen(identifier));
 
 	/* password field clamps at its capacity */
 	cb_login_form_init(&form);

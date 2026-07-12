@@ -11,9 +11,12 @@
 typedef struct {
 	char *uri;
 	char *cid;
+	/* Post targeted by this notification (for example the liked/replied-to
+	 * record). NULL for reasons such as follow that have no post subject. */
+	char *reason_subject;
 	char *author;          /* handle, e.g. alice.bsky.social */
 	char *display_name;
-	char *avatar_url;       /* avatar URL (not yet fetched to a texture) */
+	char *avatar_url;
 	char reason[CB_NOTIF_REASON_MAX + 1];
 	int is_read;
 	char *indexed_at;
@@ -30,6 +33,7 @@ typedef struct {
 typedef struct {
 	cb_app_status (*fetch_notifications)(void *context, const char *cursor,
 	                                      size_t limit, cb_notifications_page *out);
+	cb_app_status (*mark_seen)(void *context, const char *seen_at);
 } cb_notifications_backend;
 
 typedef struct {
@@ -41,6 +45,9 @@ typedef struct {
 	/* loaded flips to 1 once a fetch has been attempted successfully. */
 	int loaded;
 	cb_app_status last_status;
+	/* Kept separate so a failed acknowledgement does not hide a page that
+	 * was fetched successfully. */
+	cb_app_status seen_status;
 } cb_notifications;
 
 void cb_notification_free(cb_notification *note);
@@ -54,6 +61,11 @@ cb_app_status cb_notifications_refresh(cb_notifications *list,
 	                                   const cb_notifications_backend *backend,
 	                                   void *context);
 cb_app_status cb_notifications_load_more(cb_notifications *list,
+	                                     const cb_notifications_backend *backend,
+	                                     void *context);
+/* Acknowledge through the newest loaded notification timestamp. On success,
+ * every currently loaded row is marked read locally. */
+cb_app_status cb_notifications_mark_seen(cb_notifications *list,
 	                                     const cb_notifications_backend *backend,
 	                                     void *context);
 void cb_notifications_move(cb_notifications *list, int delta);

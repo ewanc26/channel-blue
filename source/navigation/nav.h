@@ -82,4 +82,7 @@ u8 nav_get_active_tab(void);
 /* read-only accessor for current screen on the active tab */
 screen_id_t nav_get_current_screen(void);
 
+/* True after the session menu requests a clean return to the Wii menu. */
+int nav_exit_requested(void);
+
 #endif /* NAV_H */

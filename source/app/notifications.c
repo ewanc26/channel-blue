@@ -17,6 +17,7 @@ void cb_notification_free(cb_notification *note) {
 	if (!note) return;
 	free(note->uri);
 	free(note->cid);
+	free(note->reason_subject);
 	free(note->author);
 	free(note->display_name);
 	free(note->avatar_url);
@@ -48,7 +49,8 @@ void cb_notifications_free(cb_notifications *list) {
 
 static int cb_notification_valid(const cb_notification *note) {
 	return note && note->uri && note->uri[0] && note->cid && note->cid[0] &&
-	       note->author && note->author[0];
+	       note->author && note->author[0] && note->indexed_at &&
+	       note->indexed_at[0];
 }
 
 static cb_app_status cb_notifications_fetch(cb_notifications *list,
@@ -95,6 +97,7 @@ static cb_app_status cb_notifications_fetch(cb_notifications *list,
 		size_t j;
 		for (j = 0; j < list->count; j++) cb_notification_free(&list->notes[j]);
 		list->count = 0;
+		list->selected = 0;
 	}
 	available = CB_NOTIFICATIONS_CAPACITY - list->count;
 	accepted = page.count < available ? page.count : available;
@@ -122,6 +125,28 @@ cb_app_status cb_notifications_load_more(cb_notifications *list,
 	                                     void *context) {
 	if (!list || !list->has_more) return CB_APP_INVALID;
 	return cb_notifications_fetch(list, backend, context, 1);
+}
+
+cb_app_status cb_notifications_mark_seen(cb_notifications *list,
+	                                     const cb_notifications_backend *backend,
+	                                     void *context) {
+	cb_app_status status;
+	size_t i;
+	const char *newest = NULL;
+	if (!list || !backend || !backend->mark_seen || !list->count)
+		return CB_APP_INVALID;
+	/* PDS datetime values are normalized RFC3339 strings. Do not assume page
+	 * ordering: retain the lexically newest loaded timestamp. */
+	for (i = 0; i < list->count; i++)
+		if (list->notes[i].indexed_at &&
+		    (!newest || strcmp(list->notes[i].indexed_at, newest) > 0))
+			newest = list->notes[i].indexed_at;
+	if (!newest) return CB_APP_INVALID;
+	status = backend->mark_seen(context, newest);
+	list->seen_status = status;
+	if (status == CB_APP_OK)
+		for (i = 0; i < list->count; i++) list->notes[i].is_read = 1;
+	return status;
 }
 
 void cb_notifications_move(cb_notifications *list, int delta) {

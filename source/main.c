@@ -15,6 +15,7 @@
 #include <fat.h>
 #include <sdcard/wiisd_io.h>
 #include <ogc/lwp.h>
+#include <ogc/system.h>
 #include <wolfram/platform.h>
 #include <wolfram/wii.h>
 
@@ -23,6 +24,7 @@
 #include "app/timeline.h"
 #include "app/compose.h"
 #include "app/login.h"
+#include "app/input.h"
 #include "app/entropy_seed.h"
 #include "integration/wolfram_backend.h"
 #include "render/font.h"
@@ -150,6 +152,7 @@ int main(int argc, char **argv) {
     cb_login_form login;
     lwp_t network_thread = LWP_THREAD_NULL;
     int resume_attempted = 0;
+    cb_input_repeat input_repeat;
 
     /* --- video init --- */
     VIDEO_Init();
@@ -198,12 +201,13 @@ int main(int argc, char **argv) {
     cb_profile_backend profile_backend = cb_wolfram_profile_backend();
     cb_thread_backend threadb = cb_wolfram_thread_backend();
     cb_timeline_init(&timeline);
-    cb_compose_init(&compose, 0);
+    cb_compose_init(&compose);
     cb_login_form_init(&login);
     cb_notifications_init(&notifications);
     cb_search_init(&search);
     cb_profile_init(&profile);
     cb_thread_init(&thread);
+    cb_input_repeat_init(&input_repeat);
     nav_bind_timeline(&timeline, &compose, &backend, &wolfram);
     nav_bind_thread(&thread, &threadb, &wolfram);
     nav_bind_discovery(&notifications, &search, &profile, &notes_backend,
@@ -219,7 +223,7 @@ int main(int argc, char **argv) {
     u32 fb = 0; /* current framebuffer index */
 
     /* --- main loop --- */
-    while (SYS_MainLoop()) {
+	while (SYS_MainLoop() && !nav_exit_requested()) {
         if (network_init_done && !resume_attempted) {
             __sync_synchronize();
             resume_attempted = 1;
@@ -238,7 +242,16 @@ int main(int argc, char **argv) {
         }
         WPAD_ScanPads();
 
-        u32 pressed = WPAD_ButtonsDown(0);
+        expansion_t expansion;
+        u32 raw_pressed = WPAD_ButtonsDown(0);
+        u32 pressed;
+        memset(&expansion, 0, sizeof(expansion));
+        WPAD_Expansion(0, &expansion);
+        pressed = cb_input_translate(
+            raw_pressed, expansion.type == WPAD_EXP_CLASSIC,
+            expansion.type == WPAD_EXP_CLASSIC ? expansion.classic.ljs.mag : 0.0f,
+            expansion.type == WPAD_EXP_CLASSIC ? expansion.classic.ljs.ang : 0.0f,
+            &input_repeat);
         nav_handle_input(pressed);
 
         /* draw this frame */
@@ -258,9 +271,12 @@ int main(int argc, char **argv) {
         VIDEO_WaitVSync();
     }
 
-    texcache_shutdown();
-    image_shutdown();
-    cb_timeline_free(&timeline);
+	texcache_shutdown();
+	image_shutdown();
+	if (network_thread != LWP_THREAD_NULL && network_init_done)
+		LWP_JoinThread(network_thread, NULL);
+	cb_timeline_free(&timeline);
+    cb_compose_free(&compose);
     cb_notifications_free(&notifications);
     cb_search_free(&search);
     cb_profile_free(&profile);
@@ -271,7 +287,9 @@ int main(int argc, char **argv) {
         wf_platform_shutdown();
     if (sd_mounted) fatUnmount("sd");
     KEYBOARD_Deinit();
-    font_shutdown();
+	font_shutdown();
+	if (nav_exit_requested())
+		SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
 
-    return 0;
+	return 0;
 }

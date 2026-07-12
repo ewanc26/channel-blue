@@ -16,6 +16,7 @@ typedef struct {
 	int full;
 	int empty;
 	int malformed;
+	int action_fail;
 } fake_context;
 
 static char *copy(const char *value) {
@@ -48,7 +49,10 @@ static cb_app_status fetch(void *opaque, const char *cursor, size_t limit,
 			         cursor ? 1000 + i : i);
 			out->posts[i].uri = copy(uri);
 			out->posts[i].cid = copy("cid");
+			out->posts[i].root_uri = copy(uri);
+			out->posts[i].root_cid = copy("cid");
 			out->posts[i].author = copy("author.test");
+			out->posts[i].author_did = copy("did:plc:author");
 			out->posts[i].text = copy("post text");
 			continue;
 		}
@@ -59,7 +63,11 @@ static cb_app_status fetch(void *opaque, const char *cursor, size_t limit,
 			out->posts[i].uri = copy(cursor ? "at://post/4"
 			                               : "at://post/2");
 		out->posts[i].cid = copy(i == 0 ? "cid-1" : "cid-2");
+		out->posts[i].root_uri = copy(out->posts[i].uri);
+		out->posts[i].root_cid = copy(i == 0 ? "cid-1" : "cid-2");
 		out->posts[i].author = copy(i == 0 ? "alice.test" : "bob.test");
+		out->posts[i].author_did = copy(i == 0 ? "did:plc:alice"
+		                                             : "did:plc:bob");
 		out->posts[i].text = copy(i == 0 ? "hello from Wii"
 		                                 : "second post");
 	}
@@ -79,20 +87,37 @@ static cb_app_status create(void *opaque, const char *text, const cb_post *reply
 	return CB_APP_OK;
 }
 
-static cb_app_status like(void *opaque, const cb_post *post) {
+static cb_app_status like(void *opaque, cb_post *post) {
 	assert(post->cid);
 	((fake_context *)opaque)->likes++;
+	if (((fake_context *)opaque)->action_fail) return CB_APP_NETWORK;
+	if (post->liked) {
+		free(post->like_uri);
+		post->like_uri = NULL;
+		post->liked = 0;
+	} else {
+		post->like_uri = copy("at://did:plc:me/app.bsky.feed.like/one");
+		post->liked = 1;
+	}
 	return CB_APP_OK;
 }
 
-static cb_app_status repost(void *opaque, const cb_post *post) {
+static cb_app_status repost(void *opaque, cb_post *post) {
 	assert(post->uri);
 	((fake_context *)opaque)->reposts++;
+	if (post->reposted) {
+		free(post->repost_uri);
+		post->repost_uri = NULL;
+		post->reposted = 0;
+	} else {
+		post->repost_uri = copy("at://did:plc:me/app.bsky.feed.repost/one");
+		post->reposted = 1;
+	}
 	return CB_APP_OK;
 }
 
-static cb_app_status follow(void *opaque, const char *actor) {
-	assert(strcmp(actor, "bob.test") == 0);
+static cb_app_status follow(void *opaque, const char *actor_did) {
+	assert(strcmp(actor_did, "did:plc:bob") == 0);
 	((fake_context *)opaque)->follows++;
 	return CB_APP_OK;
 }
@@ -110,13 +135,27 @@ int main(void) {
 	assert(strcmp(cb_timeline_selected(&timeline)->author, "bob.test") == 0);
 	assert(cb_timeline_like_selected(&timeline, &backend, &context) == CB_APP_OK);
 	assert(cb_timeline_selected(&timeline)->liked == 1);
+	assert(cb_timeline_selected(&timeline)->like_uri != NULL);
+	assert(cb_timeline_like_selected(&timeline, &backend, &context) == CB_APP_OK);
+	assert(cb_timeline_selected(&timeline)->liked == 0);
+	assert(cb_timeline_selected(&timeline)->like_uri == NULL);
+	context.action_fail = 1;
+	assert(cb_timeline_like_selected(&timeline, &backend, &context) ==
+	       CB_APP_NETWORK);
+	assert(!cb_timeline_selected(&timeline)->liked &&
+	       cb_timeline_selected(&timeline)->like_count == 0);
+	context.action_fail = 0;
 	assert(cb_timeline_repost_selected(&timeline, &backend, &context) ==
 	       CB_APP_OK);
+	assert(cb_timeline_selected(&timeline)->reposted == 1);
+	assert(cb_timeline_repost_selected(&timeline, &backend, &context) ==
+	       CB_APP_OK);
+	assert(cb_timeline_selected(&timeline)->reposted == 0);
 	assert(cb_timeline_follow_selected(&timeline, &backend, &context) ==
 	       CB_APP_OK);
 	assert(cb_timeline_create_post(&timeline, &backend, &context, "reply", 1) ==
 	       CB_APP_OK);
-	assert(context.likes == 1 && context.reposts == 1 && context.follows == 1);
+	assert(context.likes == 3 && context.reposts == 2 && context.follows == 1);
 	assert(context.posts == 1 && context.replied);
 	assert(cb_timeline_load_more(&timeline, &backend, &context) == CB_APP_OK);
 	assert(timeline.count == 4 && !timeline.has_more && context.fetches == 2);

@@ -4,7 +4,10 @@
 #include <stddef.h>
 
 #define CB_TIMELINE_CAPACITY 24
-#define CB_POST_TEXT_MAX 300
+/* app.bsky.feed.post: maxLength is UTF-8 bytes; maxGraphemes is the
+ * user-visible composition limit enforced when the record is validated. */
+#define CB_POST_TEXT_BYTES_MAX 3000
+#define CB_POST_TEXT_GRAPHEMES_MAX 300
 
 typedef enum {
 	CB_APP_OK = 0,
@@ -18,13 +21,20 @@ typedef enum {
 typedef struct {
 	char *uri;
 	char *cid;
-	char *author;
+	/* Thread root strong reference. Equal to uri/cid for a top-level post. */
+	char *root_uri;
+	char *root_cid;
+	char *author;       /* display handle */
+	char *author_did;   /* stable DID required by graph operations */
 	char *display_name;
 	char *text;
 	char *avatar_url;
+	char *media_url;       /* first renderable image/thumbnail URL, owned */
 	unsigned int like_count;
 	unsigned int repost_count;
 	unsigned int reply_count;
+	char *like_uri;       /* viewer's like record URI, owned; NULL when unliked */
+	char *repost_uri;     /* viewer's repost record URI, owned; NULL otherwise */
 	unsigned char liked;
 	unsigned char reposted;
 } cb_post;
@@ -49,9 +59,11 @@ typedef struct {
 	                                size_t limit, cb_timeline_page *out);
 	cb_app_status (*create_post)(void *context, const char *text,
 	                             const cb_post *reply_to);
-	cb_app_status (*like)(void *context, const cb_post *post);
-	cb_app_status (*repost)(void *context, const cb_post *post);
-	cb_app_status (*follow)(void *context, const char *actor);
+	/* Toggle callbacks update post->*_uri and the matching boolean only after
+	 * the remote create/delete succeeds. */
+	cb_app_status (*toggle_like)(void *context, cb_post *post);
+	cb_app_status (*toggle_repost)(void *context, cb_post *post);
+	cb_app_status (*follow)(void *context, const char *actor_did);
 } cb_timeline_backend;
 
 void cb_post_free(cb_post *post);

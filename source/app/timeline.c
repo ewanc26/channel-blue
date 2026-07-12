@@ -17,10 +17,16 @@ void cb_post_free(cb_post *post) {
 	if (!post) return;
 	free(post->uri);
 	free(post->cid);
+	free(post->root_uri);
+	free(post->root_cid);
 	free(post->author);
+	free(post->author_did);
 	free(post->display_name);
 	free(post->text);
 	free(post->avatar_url);
+	free(post->media_url);
+	free(post->like_uri);
+	free(post->repost_uri);
 	memset(post, 0, sizeof(*post));
 }
 
@@ -47,8 +53,13 @@ void cb_timeline_free(cb_timeline *timeline) {
 
 static int cb_post_valid(const cb_post *post) {
 	return post && post->uri && post->uri[0] && post->cid && post->cid[0] &&
-	       post->author && post->author[0] && post->text &&
-	       strlen(post->text) <= CB_POST_TEXT_MAX;
+	       post->root_uri && post->root_uri[0] &&
+	       post->root_cid && post->root_cid[0] &&
+	       post->author && post->author[0] && post->author_did &&
+	       post->author_did[0] && post->text &&
+	       strlen(post->text) <= CB_POST_TEXT_BYTES_MAX &&
+	       post->liked == (post->like_uri != NULL) &&
+	       post->reposted == (post->repost_uri != NULL);
 }
 
 static cb_app_status cb_timeline_fetch(cb_timeline *timeline,
@@ -139,7 +150,7 @@ cb_app_status cb_timeline_create_post(cb_timeline *timeline,
 	                                  int reply_to_selected) {
 	const cb_post *reply = reply_to_selected ? cb_timeline_selected(timeline) : NULL;
 	if (!timeline || !backend || !backend->create_post || !text || !text[0] ||
-	    strlen(text) > CB_POST_TEXT_MAX || (reply_to_selected && !reply))
+	    strlen(text) > CB_POST_TEXT_BYTES_MAX || (reply_to_selected && !reply))
 		return CB_APP_INVALID;
 	timeline->last_status = backend->create_post(context, text, reply);
 	return timeline->last_status;
@@ -149,12 +160,14 @@ cb_app_status cb_timeline_like_selected(cb_timeline *timeline,
 	                                    const cb_timeline_backend *backend,
 	                                    void *context) {
 	cb_post *post;
-	if (!timeline || !backend || !backend->like ||
+	int was_liked;
+	if (!timeline || !backend || !backend->toggle_like ||
 	    !(post = (cb_post *)cb_timeline_selected(timeline))) return CB_APP_INVALID;
-	timeline->last_status = backend->like(context, post);
-	if (timeline->last_status == CB_APP_OK && !post->liked) {
-		post->liked = 1;
-		post->like_count++;
+	was_liked = post->liked;
+	timeline->last_status = backend->toggle_like(context, post);
+	if (timeline->last_status == CB_APP_OK && post->liked != was_liked) {
+		if (post->liked) post->like_count++;
+		else if (post->like_count) post->like_count--;
 	}
 	return timeline->last_status;
 }
@@ -163,12 +176,14 @@ cb_app_status cb_timeline_repost_selected(cb_timeline *timeline,
 	                                      const cb_timeline_backend *backend,
 	                                      void *context) {
 	cb_post *post;
-	if (!timeline || !backend || !backend->repost ||
+	int was_reposted;
+	if (!timeline || !backend || !backend->toggle_repost ||
 	    !(post = (cb_post *)cb_timeline_selected(timeline))) return CB_APP_INVALID;
-	timeline->last_status = backend->repost(context, post);
-	if (timeline->last_status == CB_APP_OK && !post->reposted) {
-		post->reposted = 1;
-		post->repost_count++;
+	was_reposted = post->reposted;
+	timeline->last_status = backend->toggle_repost(context, post);
+	if (timeline->last_status == CB_APP_OK && post->reposted != was_reposted) {
+		if (post->reposted) post->repost_count++;
+		else if (post->repost_count) post->repost_count--;
 	}
 	return timeline->last_status;
 }
@@ -179,6 +194,6 @@ cb_app_status cb_timeline_follow_selected(cb_timeline *timeline,
 	const cb_post *post = cb_timeline_selected(timeline);
 	if (!timeline || !backend || !backend->follow || !post)
 		return CB_APP_INVALID;
-	timeline->last_status = backend->follow(context, post->author);
+	timeline->last_status = backend->follow(context, post->author_did);
 	return timeline->last_status;
 }

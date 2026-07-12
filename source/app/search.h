@@ -12,7 +12,7 @@ typedef struct {
 	char *did;
 	char *handle;
 	char *display_name;
-	char *avatar_url;       /* avatar URL (not yet fetched to a texture) */
+	char *avatar_url;
 } cb_search_result;
 
 typedef struct {

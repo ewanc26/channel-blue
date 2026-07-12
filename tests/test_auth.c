@@ -82,6 +82,23 @@ int main(void) {
 	cb_auth_free(&restored);
 	cb_auth_free(&auth);
 
+	/* Explicit sign-out clears local credentials even when remote revocation
+	 * cannot reach the PDS. */
+	cb_session_clear(path);
+	cb_auth_init(&auth);
+	context = (context_t){0};
+	assert(cb_auth_login(&auth, &backend, &context, path,
+	                     "https://bsky.social", "alice.test", "app-password") ==
+	       CB_APP_OK);
+	context.logout_result = CB_APP_NETWORK;
+	assert(cb_auth_logout(&auth, &backend, &context, path) == CB_APP_NETWORK);
+	assert(auth.state == CB_AUTH_SIGNED_OUT && auth.session.access_jwt == NULL);
+	{
+		cb_session_data cleared = {0};
+		assert(cb_session_load(path, &cleared) == CB_SESSION_NOT_FOUND);
+	}
+	cb_auth_free(&auth);
+
 	/* invalid/empty credentials never reach the backend */
 	cb_session_clear(path);
 	cb_auth_init(&auth);

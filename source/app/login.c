@@ -1,4 +1,5 @@
 #include "login.h"
+#include "utf8.h"
 
 #include <string.h>
 
@@ -41,12 +42,10 @@ cb_app_status cb_login_form_insert(cb_login_form *form, unsigned int character) 
 	char *buffer;
 	size_t *length;
 	size_t capacity;
-	if (!form || character < 32 || character > 126) return CB_APP_INVALID;
+	if (!form) return CB_APP_INVALID;
 	active_buffer(form, &buffer, &length, &capacity);
-	if (*length >= capacity) return CB_APP_INVALID;
-	buffer[(*length)++] = (char)character;
-	buffer[*length] = '\0';
-	return CB_APP_OK;
+	return cb_utf8_append(buffer, length, capacity, character)
+	     ? CB_APP_OK : CB_APP_INVALID;
 }
 
 void cb_login_form_backspace(cb_login_form *form) {
@@ -56,7 +55,7 @@ void cb_login_form_backspace(cb_login_form *form) {
 	if (!form) return;
 	active_buffer(form, &buffer, &length, &capacity);
 	(void)capacity;
-	if (*length) buffer[--(*length)] = '\0';
+	cb_utf8_backspace(buffer, length);
 }
 
 cb_app_status cb_login_form_submit(cb_login_form *form, cb_auth *auth,
