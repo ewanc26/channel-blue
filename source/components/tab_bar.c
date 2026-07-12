@@ -71,7 +71,7 @@ void tab_bar_render(u8 active_tab) {
         if (i == active_tab) {
             text_col.r = 255; text_col.g = 255; text_col.b = 255; text_col.a = 255;
         } else {
-            text_col.r = 140; text_col.g = 140; text_col.b = 140; text_col.a = 255;
+            text_col.r = 190; text_col.g = 190; text_col.b = 195; text_col.a = 255;
         }
 
         /* centre-align text within tab */

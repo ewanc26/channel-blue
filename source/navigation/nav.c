@@ -108,7 +108,7 @@ static void nav_pop(void) {
 }
 
 static void render_empty(const char *message) {
-	GXColor text = {150, 150, 150, 255};
+	GXColor text = {205, 205, 210, 255};
 	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 10, 15, 255});
 	draw_clipped_text(28, CONTENT_Y_TOP + 42, message, 78, text);
 }
@@ -120,8 +120,8 @@ static void render_feed(void) {
 	GXColor normal = {18, 20, 26, 255};
 	GXColor selected = {22, 56, 82, 255};
 	GXColor author = {235, 235, 235, 255};
-	GXColor body = {185, 185, 190, 255};
-	GXColor counts = {115, 150, 175, 255};
+	GXColor body = {220, 220, 225, 255};
+	GXColor counts = {165, 195, 215, 255};
 
 	if (!feed || !feed->count) {
 		render_empty(feed_backend && feed_backend->fetch_timeline
@@ -157,8 +157,8 @@ static void render_thread(void) {
 	GXColor normal = {18, 20, 26, 255};
 	GXColor selected = {22, 56, 82, 255};
 	GXColor author = {235, 235, 235, 255};
-	GXColor body = {185, 185, 190, 255};
-	GXColor counts = {115, 150, 175, 255};
+	GXColor body = {220, 220, 225, 255};
+	GXColor counts = {165, 195, 215, 255};
 
 	if (!thread_ctrl || !thread_ctrl->loaded) {
 		render_empty(thread_ctrl && thread_ctrl->last_status != CB_APP_OK
@@ -259,8 +259,8 @@ static void render_notifications(void) {
 	GXColor normal = {18, 20, 26, 255};
 	GXColor selected = {22, 56, 82, 255};
 	GXColor author = {235, 235, 235, 255};
-	GXColor body = {185, 185, 190, 255};
-	GXColor reason = {130, 200, 240, 255};
+	GXColor body = {220, 220, 225, 255};
+	GXColor reason = {165, 215, 245, 255};
 
 	if (!notifications || !notifications->loaded) {
 		if (notifications && notifications->last_status == CB_APP_NETWORK)
@@ -300,7 +300,7 @@ static void render_search(void) {
 	GXColor normal = {18, 20, 26, 255};
 	GXColor selected = {22, 56, 82, 255};
 	GXColor author = {235, 235, 235, 255};
-	GXColor body = {185, 185, 190, 255};
+	GXColor body = {220, 220, 225, 255};
 	GXColor field = {25, 28, 35, 255};
 	f32 list_top = CONTENT_Y_TOP + 56.0f;
 	size_t first;
@@ -350,7 +350,7 @@ static void render_search(void) {
 }
 
 static void render_profile(void) {
-	GXColor label = {150, 150, 155, 255};
+	GXColor label = {195, 195, 202, 255};
 	GXColor value = {225, 225, 228, 255};
 	GXColor accent = {29, 155, 240, 255};
 	char counts[96];
