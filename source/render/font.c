@@ -104,9 +104,10 @@ static u32 *expand_bitmap_to_ia8(const FT_Bitmap *bitmap,
             u32 tile = ((u32)(y / 4) * (w / 4)) + (x / 4);
             u32 in_tile = (u32)(y % 4) * 4 + (x % 4);
             u32 texel_idx = tile * 16 + in_tile;
-            /* IA8: first byte = intensity (from grayscale), second byte = alpha */
-            dst[texel_idx * 2 + 0] = src[x];        /* intensity */
-            dst[texel_idx * 2 + 1] = src[x];        /* alpha = intensity for clean text */
+            /* IA8: keep glyph coverage in alpha only. Applying grayscale to
+             * both intensity and alpha makes antialiased edges too dim. */
+            dst[texel_idx * 2 + 0] = 0xFF;          /* full glyph intensity */
+            dst[texel_idx * 2 + 1] = src[x];        /* grayscale coverage */
         }
         src += bitmap->pitch;
     }
