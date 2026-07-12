@@ -81,7 +81,7 @@ static u16 align_to_tex_dim(u16 dim) {
 /*
  * expand_bitmap_to_ia8 — convert FreeType 8-bit grayscale bitmap to IA8.
  *
- * IA8 layout: pairs of bytes [intensity][alpha] for each pixel.
+ * IA8 layout in GX memory: pairs of bytes [alpha][intensity] for each pixel.
  * Texture dimensions are aligned to 4-pixel boundaries.
  * Caller must free() the returned buffer.
  */
@@ -96,8 +96,8 @@ static u32 *expand_bitmap_to_ia8(const FT_Bitmap *bitmap,
      * bilinearly sample them at glyph edges; a zero intensity there creates
      * a black fringe even when alpha is zero. */
     for (u32 i = 0; i < (u32)w * h; i++) {
-        ((u8 *)ia8)[i * 2 + 0] = 0xFF;
-        ((u8 *)ia8)[i * 2 + 1] = 0x00;
+        ((u8 *)ia8)[i * 2 + 0] = 0x00;
+        ((u8 *)ia8)[i * 2 + 1] = 0xFF;
     }
 
     u8 *src = bitmap->buffer;
@@ -112,8 +112,8 @@ static u32 *expand_bitmap_to_ia8(const FT_Bitmap *bitmap,
             u32 texel_idx = tile * 16 + in_tile;
             /* IA8: keep glyph coverage in alpha only. Applying grayscale to
              * both intensity and alpha makes antialiased edges too dim. */
-            dst[texel_idx * 2 + 0] = 0xFF;          /* full glyph intensity */
-            dst[texel_idx * 2 + 1] = src[x];        /* grayscale coverage */
+            dst[texel_idx * 2 + 0] = src[x];        /* grayscale coverage */
+            dst[texel_idx * 2 + 1] = 0xFF;          /* full glyph intensity */
         }
         src += bitmap->pitch;
     }
