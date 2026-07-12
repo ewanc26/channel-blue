@@ -51,6 +51,10 @@ void texcache_init(void);
  */
 void texcache_shutdown(void);
 
+/* Evict all decoded media while keeping the cache available for the next
+ * authenticated account. */
+void texcache_clear(void);
+
 /*
  * texcache_get — retrieve a cached image by key.
  *

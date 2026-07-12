@@ -18,6 +18,7 @@
 #include "../app/session_menu.h"
 #include "../app/utf8.h"
 #include "../app/media.h"
+#include "../render/texcache.h"
 
 static nav_state_t nav;
 static u8 nav_prev_tab;
@@ -536,6 +537,7 @@ static void activate_session_menu(void) {
 			cb_auth_logout(authentication, authentication_backend, feed_context,
 			               authentication_path);
 			clear_account_views();
+			texcache_clear();
 			nav_init();
 			nav_push(SCREEN_LOGIN);
 		} else nav_pop();

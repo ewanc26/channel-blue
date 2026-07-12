@@ -20,13 +20,17 @@ void texcache_init(void) {
 }
 
 void texcache_shutdown(void) {
-    for (int i = 0; i < TEXCACHE_MAX_SLOTS; i++) {
-        if (cache.slots[i].in_use) {
-            image_free(&cache.slots[i].image);
-            cache.slots[i].in_use = 0;
-        }
-    }
-    memset(&cache, 0, sizeof(cache));
+	texcache_clear();
+	memset(&cache, 0, sizeof(cache));
+}
+
+void texcache_clear(void) {
+	for (int i = 0; i < TEXCACHE_MAX_SLOTS; i++) {
+		if (cache.slots[i].in_use) {
+			image_free(&cache.slots[i].image);
+			cache.slots[i].in_use = 0;
+		}
+	}
 }
 
 decoded_image_t *texcache_get(const char *key) {
