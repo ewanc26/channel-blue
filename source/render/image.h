@@ -18,8 +18,12 @@
 #include <stdint.h>
 
 /* maximum image dimensions to prevent excessive memory use on Wii */
-#define IMAGE_MAX_WIDTH  480
+#define IMAGE_MAX_WIDTH  640
 #define IMAGE_MAX_HEIGHT 480
+/* Keep compressed-image expansion bounded before any downsampling pass. */
+#define IMAGE_MAX_SOURCE_WIDTH  (IMAGE_MAX_WIDTH * 8)
+#define IMAGE_MAX_SOURCE_HEIGHT (IMAGE_MAX_HEIGHT * 8)
+#define IMAGE_MAX_SOURCE_PIXELS (4u * 1024u * 1024u)
 
 /* decoded image — holds GX-ready texture data */
 typedef struct {

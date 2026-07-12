@@ -4,8 +4,8 @@
  * Caches decoded_image_t entries indexed by a string key (typically a URL
  * hash or DID). LRU eviction when the cache is full.
  *
- * Memory budget: each slot holds a decoded_image_t with up to 48×48 RGBA8
- * texture data (~32 KB per slot). With 8 slots, total budget is ~256 KB.
+ * Memory budget: media previews are capped at 160×96 RGBA8 (~61 KB per
+ * slot). With 8 slots, the shared avatar/media cache stays below 512 KB.
  *
  * Usage:
  *   1. Call texcache_init() once at startup.

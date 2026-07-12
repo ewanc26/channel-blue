@@ -48,5 +48,7 @@ int cb_avatar_draw(const char *url, f32 x, f32 y, f32 size, GXColor color);
  */
 cb_app_status cb_avatar_prefetch_feed(const cb_timeline *feed,
                                       cb_wolfram_context *context);
+cb_app_status cb_avatar_prefetch_posts(const cb_post *posts, size_t count,
+                                       cb_wolfram_context *context);
 
 #endif /* CB_AVATAR_H */

@@ -16,9 +16,9 @@
 
 /* font sizes available */
 typedef enum {
-    FONT_SIZE_TAB_BAR = 20,
-    FONT_SIZE_HEADER  = 18,
-    FONT_SIZE_HINTS   = 14,
+    FONT_SIZE_TAB_BAR = 0,
+    FONT_SIZE_HEADER,
+    FONT_SIZE_HINTS,
     FONT_SIZE_COUNT
 } font_size_id_t;
 
@@ -36,11 +36,11 @@ int font_init(void);
 void font_shutdown(void);
 
 /*
- * font_draw_text — draw a null-terminated ASCII string at (x, y).
+ * font_draw_text — draw a null-terminated UTF-8 string at (x, y).
  *
  * Draws using the specified font size and GXColor.
  * Returns the total pixel width of the rendered text.
- * Only supports ASCII printable characters (32-126); others are skipped.
+ * Unsupported glyphs are rendered with the font's replacement glyph.
  */
 int font_draw_text(f32 x, f32 y, const char *text, font_size_id_t size,
                    GXColor color);

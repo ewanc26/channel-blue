@@ -68,11 +68,17 @@ int cb_avatar_draw(const char *url, f32 x, f32 y, f32 size, GXColor color) {
 
 cb_app_status cb_avatar_prefetch_feed(const cb_timeline *feed,
                                       cb_wolfram_context *context) {
+	if (!feed || !context) return CB_APP_INVALID;
+	return cb_avatar_prefetch_posts(feed->posts, feed->count, context);
+}
+
+cb_app_status cb_avatar_prefetch_posts(const cb_post *posts, size_t count,
+                                       cb_wolfram_context *context) {
 	size_t i;
 	cb_app_status last = CB_APP_OK;
-	if (!feed || !context) return CB_APP_INVALID;
-	for (i = 0; i < feed->count; i++) {
-		const char *url = feed->posts[i].avatar_url;
+	if (!posts || !context) return CB_APP_INVALID;
+	for (i = 0; i < count; i++) {
+		const char *url = posts[i].avatar_url;
 		cb_app_status status;
 		if (!url) continue;
 		status = cb_avatar_ensure(context, url);

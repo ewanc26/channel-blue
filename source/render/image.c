@@ -115,11 +115,15 @@ static int decode_jpeg(const u8 *data, u32 data_size,
                        decoded_image_t *out) {
     struct jpeg_decompress_struct cinfo;
     struct cb_jpeg_error_mgr jerr;
+    u8 *rgb = NULL;
+    u8 *rgba = NULL;
 
     cinfo.err = jpeg_std_error(&jerr.pub);
     jerr.pub.error_exit = jpeg_error_exit;
 
     if (setjmp(jerr.setjmp_buffer)) {
+        free(rgb);
+        free(rgba);
         jpeg_destroy_decompress(&cinfo);
         return -1;
     }
@@ -144,7 +148,7 @@ static int decode_jpeg(const u8 *data, u32 data_size,
     u16 h = cinfo.output_height;
 
     /* decode to RGB first, then expand to RGBA */
-    u8 *rgb = (u8 *)memalign(32, (u32)w * h * 3);
+    rgb = (u8 *)memalign(32, (u32)w * h * 3);
     if (!rgb) {
         jpeg_destroy_decompress(&cinfo);
         return -1;
@@ -159,7 +163,7 @@ static int decode_jpeg(const u8 *data, u32 data_size,
     jpeg_destroy_decompress(&cinfo);
 
     /* expand RGB → RGBA */
-    u8 *rgba = (u8 *)memalign(32, (u32)w * h * 4);
+    rgba = (u8 *)memalign(32, (u32)w * h * 4);
     if (!rgba) {
         free(rgb);
         return -1;
@@ -194,7 +198,9 @@ static int decode_jpeg(const u8 *data, u32 data_size,
 static int decode_png(const u8 *data, u32 data_size,
                       u16 max_w, u16 max_h,
                       decoded_image_t *out) {
-    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING,
+	u8 *full_rgba = NULL;
+	png_bytep *row_pointers = NULL;
+	 png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING,
                                               NULL, NULL, NULL);
     if (!png) return -1;
 
@@ -204,9 +210,11 @@ static int decode_png(const u8 *data, u32 data_size,
         return -1;
     }
 
-    if (setjmp(png_jmpbuf(png))) {
-        png_destroy_read_struct(&png, &info, NULL);
-        return -1;
+	if (setjmp(png_jmpbuf(png))) {
+		free(row_pointers);
+		free(full_rgba);
+		png_destroy_read_struct(&png, &info, NULL);
+		return -1;
     }
 
     png_mem_reader_t reader;
@@ -221,6 +229,16 @@ static int decode_png(const u8 *data, u32 data_size,
     u32 orig_h = png_get_image_height(png, info);
     png_byte color_type = png_get_color_type(png, info);
     png_byte bit_depth = png_get_bit_depth(png, info);
+
+    /* PNG has no decoder-side scale factor like JPEG. Reject dimensions that
+     * would make the temporary RGBA expansion unsafe on the Wii rather than
+     * allocating an unbounded source image and shrinking it later. */
+    if (!orig_w || !orig_h || orig_w > IMAGE_MAX_SOURCE_WIDTH ||
+        orig_h > IMAGE_MAX_SOURCE_HEIGHT ||
+        orig_w > IMAGE_MAX_SOURCE_PIXELS / orig_h) {
+        png_destroy_read_struct(&png, &info, NULL);
+        return -1;
+    }
 
     if (bit_depth == 16)
         png_set_strip_16(png);
@@ -240,24 +258,26 @@ static int decode_png(const u8 *data, u32 data_size,
 
     png_read_update_info(png, info);
 
-    u8 *full_rgba = (u8 *)memalign(32, orig_w * orig_h * 4);
+	full_rgba = (u8 *)memalign(32, orig_w * orig_h * 4);
     if (!full_rgba) {
         png_destroy_read_struct(&png, &info, NULL);
         return -1;
     }
 
-    png_bytep *row_pointers = (png_bytep *)malloc(orig_h * sizeof(png_bytep));
+	row_pointers = (png_bytep *)malloc(orig_h * sizeof(png_bytep));
     if (!row_pointers) {
         free(full_rgba);
         png_destroy_read_struct(&png, &info, NULL);
         return -1;
     }
 
-    for (u32 y = 0; y < orig_h; y++)
-        row_pointers[y] = full_rgba + y * orig_w * 4;
+	for (u32 y = 0; y < orig_h; y++) {
+		row_pointers[y] = full_rgba + y * orig_w * 4;
+	}
 
-    png_read_image(png, row_pointers);
-    free(row_pointers);
+	png_read_image(png, row_pointers);
+	free(row_pointers);
+	row_pointers = NULL;
     png_destroy_read_struct(&png, &info, NULL);
 
     u16 w = orig_w;
@@ -341,6 +361,9 @@ int image_decode(const u8 *data, u32 data_size,
                  u16 max_width, u16 max_height,
                  decoded_image_t *out) {
     if (!data || data_size < 4 || !out) return -1;
+    if (!max_width || !max_height) return -1;
+    if (max_width > IMAGE_MAX_WIDTH) max_width = IMAGE_MAX_WIDTH;
+    if (max_height > IMAGE_MAX_HEIGHT) max_height = IMAGE_MAX_HEIGHT;
     memset(out, 0, sizeof(*out));
 
     if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
@@ -360,7 +383,10 @@ void image_draw(f32 x, f32 y, const decoded_image_t *img, GXColor color) {
 
 void image_draw_scaled(f32 x, f32 y, f32 draw_w, f32 draw_h,
                        const decoded_image_t *img, GXColor color) {
-    if (!img || !img->texture_data) return;
+    if (!img || !img->texture_data || draw_w <= 0.0f || draw_h <= 0.0f)
+        return;
+    if (draw_w > IMAGE_MAX_WIDTH) draw_w = IMAGE_MAX_WIDTH;
+    if (draw_h > IMAGE_MAX_HEIGHT) draw_h = IMAGE_MAX_HEIGHT;
 
     setup_textured_vtx_fmt();
 
@@ -413,5 +439,7 @@ void image_free(decoded_image_t *img) {
     }
     img->texture_width  = 0;
     img->texture_height = 0;
+    img->image_width    = 0;
+    img->image_height   = 0;
     img->data_size      = 0;
 }
