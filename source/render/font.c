@@ -92,7 +92,13 @@ static u32 *expand_bitmap_to_ia8(const FT_Bitmap *bitmap,
 
     u32 *ia8 = (u32 *)memalign(32, w * h * 2);
     if (!ia8) return NULL;
-    memset(ia8, 0, w * h * 2);
+    /* Keep transparent texels white in the intensity channel. GX can
+     * bilinearly sample them at glyph edges; a zero intensity there creates
+     * a black fringe even when alpha is zero. */
+    for (u32 i = 0; i < (u32)w * h; i++) {
+        ((u8 *)ia8)[i * 2 + 0] = 0xFF;
+        ((u8 *)ia8)[i * 2 + 1] = 0x00;
+    }
 
     u8 *src = bitmap->buffer;
     u8 *dst = (u8 *)ia8;
