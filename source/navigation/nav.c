@@ -164,8 +164,10 @@ static void render_login(void) {
 	               FONT_SIZE_HINTS, (GXColor){140, 165, 180, 255});
 	if (login_form->last_status != CB_APP_OK)
 		font_draw_text(54, CONTENT_Y_TOP + 292,
-		               login_form->last_status == CB_APP_NOT_IMPLEMENTED
-		               ? "Wii HTTPS transport is not implemented yet."
+		               login_form->last_status == CB_APP_CONFIGURATION
+		               ? "Install a valid unique entropy.bin on the SD card."
+		               : login_form->last_status == CB_APP_NOT_IMPLEMENTED
+		               ? "This operation is not available on Wii yet."
 		               : "Sign-in failed. Check details/network and retry.",
 		               FONT_SIZE_HINTS, (GXColor){230, 120, 110, 255});
 }
@@ -214,6 +216,8 @@ void nav_bind_auth(cb_auth *auth, cb_login_form *login,
 	authentication_backend = backend;
 	authentication_path = session_path;
 	if (auth && auth->state == CB_AUTH_READY) {
+		if (nav_get_current_screen() == SCREEN_LOGIN)
+			nav_pop();
 		if (feed && feed_backend && feed_backend->fetch_timeline)
 			cb_timeline_refresh(feed, feed_backend, feed_context);
 	} else {
