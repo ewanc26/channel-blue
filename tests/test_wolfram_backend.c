@@ -6,6 +6,7 @@
 
 #include <cJSON.h>
 #include <wolfram/actor_typed.h>
+#include <wolfram/thread_typed.h>
 
 static char *copy(const char *value) {
 	char *result = malloc(strlen(value) + 1);
@@ -84,6 +85,61 @@ static void test_convert_profile(void) {
 	wf_agent_profile_free(&source);
 }
 
+static void test_convert_thread(void) {
+	wf_agent_thread tree = {0};
+	cb_timeline_page page = {0};
+	wf_agent_thread_node *parent;
+	wf_agent_thread_node *reply;
+
+	/* ancestor */
+	tree.root.parent = parent = calloc(1, sizeof(*parent));
+	assert(parent);
+	parent->kind = WF_AGENT_THREAD_KIND_POST;
+	parent->post.uri = copy("at://did:plc:alice/app.bsky.feed.post/parent");
+	parent->post.cid = copy("cid-p");
+	parent->post.author.handle = copy("alice.test");
+	parent->post.author.display_name = copy("Alice");
+	parent->post.record = cJSON_CreateObject();
+	assert(parent->post.record);
+	assert(cJSON_AddStringToObject(parent->post.record, "text", "parent post") != NULL);
+	parent->post.like_count = 2;
+
+	/* focused post */
+	tree.root.kind = WF_AGENT_THREAD_KIND_POST;
+	tree.root.post.uri = copy("at://did:plc:bob/app.bsky.feed.post/root");
+	tree.root.post.cid = copy("cid-r");
+	tree.root.post.author.handle = copy("bob.test");
+	tree.root.post.author.display_name = copy("Bob");
+	tree.root.post.record = cJSON_CreateObject();
+	assert(tree.root.post.record);
+	assert(cJSON_AddStringToObject(tree.root.post.record, "text", "root post") != NULL);
+	tree.root.post.reply_count = 1;
+
+	/* a reply */
+	tree.root.replies = reply = calloc(1, sizeof(*reply));
+	assert(reply);
+	tree.root.replies_count = 1;
+	reply->kind = WF_AGENT_THREAD_KIND_POST;
+	reply->post.uri = copy("at://did:plc:carol/app.bsky.feed.post/reply");
+	reply->post.cid = copy("cid-c");
+	reply->post.author.handle = copy("carol.test");
+	reply->post.author.display_name = copy("Carol");
+	reply->post.record = cJSON_CreateObject();
+	assert(reply->post.record);
+	assert(cJSON_AddStringToObject(reply->post.record, "text", "reply post") != NULL);
+
+	assert(cb_wolfram_convert_thread(&tree, &page) == CB_APP_OK);
+	assert(page.count == 3);
+	/* flattened in reading order: ancestor, focused post, reply */
+	assert(strcmp(page.posts[0].author, "alice.test") == 0);
+	assert(page.posts[0].like_count == 2);
+	assert(strcmp(page.posts[1].author, "bob.test") == 0);
+	assert(page.posts[1].reply_count == 1);
+	assert(strcmp(page.posts[2].author, "carol.test") == 0);
+	cb_timeline_page_free(&page);
+	wf_agent_thread_free(&tree);
+}
+
 int main(void) {
 	wf_agent_feed_list source = {0};
 	cb_timeline_page page = {0};
@@ -118,5 +174,6 @@ int main(void) {
 	test_convert_notifications();
 	test_convert_search();
 	test_convert_profile();
+	test_convert_thread();
 	return 0;
 }

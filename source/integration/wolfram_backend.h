@@ -6,6 +6,7 @@
 #include "../app/notifications.h"
 #include "../app/search.h"
 #include "../app/profile.h"
+#include "../app/thread.h"
 
 #include <wolfram/bsky_agent.h>
 #include <wolfram/xrpc.h>
@@ -31,6 +32,7 @@ cb_timeline_backend cb_wolfram_timeline_backend(void);
 cb_notifications_backend cb_wolfram_notifications_backend(void);
 cb_search_backend cb_wolfram_search_backend(void);
 cb_profile_backend cb_wolfram_profile_backend(void);
+cb_thread_backend cb_wolfram_thread_backend(void);
 
 /* Exposed for offline fixture tests; each converts an owned Wolfram result
  * without transferring ownership from it. Free the result with the matching
@@ -43,6 +45,8 @@ cb_app_status cb_wolfram_convert_search(const wf_agent_actor_list *source,
 	                                cb_search_page *out);
 cb_app_status cb_wolfram_convert_profile(const wf_agent_profile *source,
 	                                 cb_profile_data *out);
+cb_app_status cb_wolfram_convert_thread(const wf_agent_thread *source,
+	                                cb_timeline_page *out);
 
 /* Fetch an avatar's raw image bytes over HTTPS via wolfram's transport.
  *
