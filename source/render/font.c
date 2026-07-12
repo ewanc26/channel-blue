@@ -99,7 +99,11 @@ static u32 *expand_bitmap_to_ia8(const FT_Bitmap *bitmap,
 
     for (u16 y = 0; y < bitmap->rows; y++) {
         for (u16 x = 0; x < bitmap->width; x++) {
-            u16 texel_idx = y * w + x;
+            /* IA8 textures use GX's 4x4 tile order, not a linear row-major
+             * layout. Swizzle each glyph bitmap before uploading to TMEM. */
+            u32 tile = ((u32)(y / 4) * (w / 4)) + (x / 4);
+            u32 in_tile = (u32)(y % 4) * 4 + (x % 4);
+            u32 texel_idx = tile * 16 + in_tile;
             /* IA8: first byte = intensity (from grayscale), second byte = alpha */
             dst[texel_idx * 2 + 0] = src[x];        /* intensity */
             dst[texel_idx * 2 + 1] = src[x];        /* alpha = intensity for clean text */
