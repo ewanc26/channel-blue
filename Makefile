@@ -175,6 +175,10 @@ test:
 		-o build-host/test_entropy_seed
 	@build-host/test_entropy_seed
 	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_avatar_key.c source/app/avatar_key.c \
+		-o build-host/test_avatar_key
+	@build-host/test_avatar_key
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
 		tests/test_retry.c source/app/retry.c \
 		-o build-host/test_retry
 	@build-host/test_retry
