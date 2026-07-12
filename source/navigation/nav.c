@@ -196,7 +196,7 @@ static void render_compose(void) {
 	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, CB_COLOR_SURFACE_DEEP);
 	font_draw_text(22, CONTENT_Y_TOP + 18,
 	               draft && draft->replying ? "Replying to selected post" : "New post",
-	               FONT_SIZE_HINTS, CB_COLOR_ACCENT);
+	               FONT_SIZE_HINTS, CB_COLOR_TEXT);
 	draw_quad(18, CONTENT_Y_TOP + 48, 604, 172, CB_COLOR_RAISED);
 	draw_clipped_text(30, CONTENT_Y_TOP + 66,
 	                  draft && draft->length ? draft->text : "Type with a USB keyboard...",
@@ -352,7 +352,7 @@ static void render_search(void) {
 static void render_profile(void) {
 	GXColor label = CB_COLOR_MUTED;
 	GXColor value = CB_COLOR_TEXT;
-	GXColor accent = CB_COLOR_ACCENT;
+	GXColor accent = CB_COLOR_TEXT;
 	char counts[96];
 
 	if (!profile || !profile->loaded) {
