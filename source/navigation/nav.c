@@ -14,6 +14,7 @@
 #include "../app/notifications.h"
 #include "../app/search.h"
 #include "../app/profile.h"
+#include "../app/thread.h"
 
 static nav_state_t nav;
 static u8 nav_prev_tab;
@@ -32,6 +33,9 @@ static const cb_notifications_backend *notifications_backend;
 static const cb_search_backend *search_backend;
 static const cb_profile_backend *profile_backend;
 static void *discovery_context;
+static cb_thread *thread_ctrl;
+static const cb_thread_backend *thread_backend;
+static void *thread_context;
 
 static void draw_quad(f32 x, f32 y, f32 w, f32 h, GXColor col) {
 	GX_SetChanMatColor(GX_COLOR0A0, col);
@@ -111,22 +115,39 @@ static void render_feed(void) {
 }
 
 static void render_thread(void) {
-	const cb_post *post = cb_timeline_selected(feed);
-	GXColor author = {245, 245, 245, 255};
-	GXColor body = {195, 195, 200, 255};
-	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 12, 16, 255});
-	if (!post) {
-		render_empty("This post is no longer available.");
+	size_t first;
+	size_t end;
+	size_t i;
+	GXColor normal = {18, 20, 26, 255};
+	GXColor selected = {22, 56, 82, 255};
+	GXColor author = {235, 235, 235, 255};
+	GXColor body = {185, 185, 190, 255};
+	GXColor counts = {115, 150, 175, 255};
+
+	if (!thread_ctrl || !thread_ctrl->loaded) {
+		render_empty("Loading thread. Press B to go back.");
 		return;
 	}
-	cb_avatar_draw(post->avatar_url, 24, CONTENT_Y_TOP + 24, 64,
-	               (GXColor){255, 255, 255, 255});
-	draw_clipped_text(100, CONTENT_Y_TOP + 28,
-	                  post->display_name ? post->display_name : post->author, 42, author);
-	draw_clipped_text(100, CONTENT_Y_TOP + 100, post->text, 56, body);
-	draw_clipped_text(24, CONTENT_Y_TOP + 112,
-	                  "A: Reply   +: Follow   1: Like   2: Repost", 70,
-	                  (GXColor){100, 165, 210, 255});
+	if (!thread_ctrl->count) {
+		render_empty("This thread is unavailable.");
+		return;
+	}
+	first = (thread_ctrl->selected / 4) * 4;
+	end = first + 4 < thread_ctrl->count ? first + 4 : thread_ctrl->count;
+	for (i = first; i < end; i++) {
+		const cb_post *post = &thread_ctrl->posts[i];
+		f32 y = CONTENT_Y_TOP + (f32)(i - first) * 88.0f;
+		char meta[72];
+		draw_quad(8, y + 3, 624, 82, i == thread_ctrl->selected ? selected : normal);
+		cb_avatar_draw(post->avatar_url, 18, y + 10, 64,
+		               (GXColor){255, 255, 255, 255});
+		draw_clipped_text(92, y + 10, post->display_name ? post->display_name : post->author,
+		                  34, author);
+		draw_clipped_text(92, y + 34, post->text, 66, body);
+		snprintf(meta, sizeof(meta), "Replies %u   Reposts %u   Likes %u",
+		         post->reply_count, post->repost_count, post->like_count);
+		draw_clipped_text(92, y + 59, meta, 58, counts);
+	}
 }
 
 static void render_compose(void) {
@@ -375,6 +396,13 @@ void nav_bind_discovery(cb_notifications *notes, cb_search *search_ctrl,
 	discovery_context = context;
 }
 
+void nav_bind_thread(cb_thread *thread_c, const cb_thread_backend *backend,
+	                 void *context) {
+	thread_ctrl = thread_c;
+	thread_backend = backend;
+	thread_context = context;
+}
+
 static void submit_login(void) {
 	if (!login_form || !authentication || !authentication_backend ||
 	    !authentication_path) return;
@@ -421,7 +449,7 @@ void nav_handle_input(u32 pressed) {
 		    cb_compose_submit(draft, feed, feed_backend, feed_context) == CB_APP_OK)
 			nav_pop();
 		if (pressed & WPAD_BUTTON_B) nav_pop();
-	} else if (screen == SCREEN_FEED || screen == SCREEN_THREAD) {
+	} else if (screen == SCREEN_FEED) {
 		if (pressed & WPAD_BUTTON_UP) cb_timeline_move(feed, -1);
 		if (pressed & WPAD_BUTTON_DOWN) cb_timeline_move(feed, 1);
 		if (pressed & WPAD_BUTTON_1)
@@ -433,20 +461,37 @@ void nav_handle_input(u32 pressed) {
 			nav_push(SCREEN_COMPOSE);
 		}
 		if (pressed & WPAD_BUTTON_A && cb_timeline_selected(feed)) {
-			if (screen == SCREEN_FEED) nav_push(SCREEN_THREAD);
-			else {
-				cb_compose_init(draft, 1);
-				nav_push(SCREEN_COMPOSE);
-			}
+			const cb_post *picked = cb_timeline_selected(feed);
+			nav_push(SCREEN_THREAD);
+			if (thread_ctrl && thread_backend)
+				cb_thread_load(thread_ctrl, thread_backend, thread_context,
+				               picked->uri);
 		}
-		if (pressed & WPAD_BUTTON_PLUS && screen == SCREEN_FEED && feed &&
+		if (pressed & WPAD_BUTTON_PLUS && feed &&
 		    feed_backend && feed_backend->fetch_timeline) {
 			if (feed->has_more) cb_timeline_load_more(feed, feed_backend, feed_context);
 			else cb_timeline_refresh(feed, feed_backend, feed_context);
 			cb_avatar_prefetch_feed(feed, (cb_wolfram_context *)feed_context);
 		}
-		if (pressed & WPAD_BUTTON_PLUS && screen == SCREEN_THREAD)
-			cb_timeline_follow_selected(feed, feed_backend, feed_context);
+		if (pressed & WPAD_BUTTON_B) nav_pop();
+	} else if (screen == SCREEN_THREAD) {
+		if (pressed & WPAD_BUTTON_UP) cb_thread_move(thread_ctrl, -1);
+		if (pressed & WPAD_BUTTON_DOWN) cb_thread_move(thread_ctrl, 1);
+		if (pressed & WPAD_BUTTON_1)
+			cb_thread_like_selected(thread_ctrl, thread_backend, thread_context);
+		if (pressed & WPAD_BUTTON_2)
+			cb_thread_repost_selected(thread_ctrl, thread_backend, thread_context);
+		if (pressed & WPAD_BUTTON_MINUS) {
+			cb_compose_init(draft, 0);
+			nav_push(SCREEN_COMPOSE);
+		}
+		if (pressed & WPAD_BUTTON_A && cb_thread_selected(thread_ctrl)) {
+			cb_compose_init(draft, 1);
+			nav_push(SCREEN_COMPOSE);
+		}
+		if (pressed & WPAD_BUTTON_PLUS && thread_ctrl && thread_backend &&
+		    thread_ctrl->root_uri)
+			cb_thread_follow_selected(thread_ctrl, thread_backend, thread_context);
 		if (pressed & WPAD_BUTTON_B) nav_pop();
 	} else if (screen == SCREEN_NOTIFICATIONS) {
 		if (pressed & WPAD_BUTTON_UP) cb_notifications_move(notifications, -1);

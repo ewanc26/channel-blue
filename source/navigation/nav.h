@@ -15,6 +15,7 @@
 #include "../app/notifications.h"
 #include "../app/search.h"
 #include "../app/profile.h"
+#include "../app/thread.h"
 
 /* layout constants (pixels) */
 #define TAB_BAR_HEIGHT    40
@@ -59,6 +60,12 @@ void nav_bind_discovery(cb_notifications *notes, cb_search *search_ctrl,
                         const cb_search_backend *search_backend,
                         const cb_profile_backend *profile_backend,
                         void *context);
+
+/* Bind the conversation/thread controller and its transport adapter. The
+ * pointed-to objects must outlive the navigation loop. The context is the
+ * shared wolfram context already bound to the timeline. */
+void nav_bind_thread(cb_thread *thread_ctrl, const cb_thread_backend *backend,
+                     void *context);
 
 /* handle one frame of input; called before render */
 void nav_handle_input(u32 pressed);
