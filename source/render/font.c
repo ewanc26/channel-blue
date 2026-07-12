@@ -286,6 +286,7 @@ int font_draw_text(f32 x, f32 y, const char *text, font_size_id_t size,
     const char *p = text;
     while (*p) {
         u32 ch = cb_utf8_next(&p);
+		if (ch < 32u || ch == 127u) continue;
         glyph_cache_entry_t *g = cache_glyph(ch, size);
         if (!g) continue;
 
@@ -347,7 +348,10 @@ int font_text_width(const char *text, font_size_id_t size) {
     int width = 0;
     const char *p = text;
     while (*p) {
-        glyph_cache_entry_t *g = cache_glyph(cb_utf8_next(&p), size);
+		u32 ch = cb_utf8_next(&p);
+		glyph_cache_entry_t *g;
+		if (ch < 32u || ch == 127u) continue;
+		g = cache_glyph(ch, size);
         if (g) width += g->advance_x;
     }
     return width;
