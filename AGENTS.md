@@ -93,16 +93,15 @@ Channel Blue is a Bluesky client for the Nintendo Wii. It runs as a homebrew app
 
 ## Current state
 
-The project is in MVP integration. It has a cross-compiling GX UI, FreeType
-text and image pipeline, bounded timeline/composition/auth controllers, atomic
-SD session persistence, USB keyboard input, and a concrete adapter to the
-cross-compiled wolfram SDK. The adapter and complete `.dol` link successfully.
-Live calls remain blocked by wolfram's honest Wii HTTPS transport stub. The
-immediate next steps are:
+The project is an MVP candidate. It has a cross-compiling GX UI, FreeType text
+and image pipeline, bounded timeline/composition/auth controllers, atomic SD
+session persistence, USB keyboard input, and a concrete adapter to the
+cross-compiled wolfram SDK. Wolfram now provides an mbedTLS-backed Wii HTTPS
+transport with CA validation and externally provisioned rotating entropy. The
+complete `.dol` links and the UI boots in Dolphin. The immediate next steps are:
 
-1. Finish wolfram's secure Wii HTTPS transport, including a trustworthy entropy
-   source and CA validation; never substitute `rand()` or timing values.
-2. Verify login/session refresh and timeline calls on real Wii hardware.
+1. Verify login/session refresh, TLS validation, and timeline calls on real Wii
+   hardware.
 3. Fetch avatar bytes through wolfram and populate the existing fixed texture
    cache.
 4. Replace the remaining search/notification/profile placeholders.
@@ -113,7 +112,8 @@ immediate next steps are:
 - [x] Bootstrap: Makefile, DOL, SD card deployment metadata
 - [x] Cross-compile and link libwolfram for PPC
 - [x] WiFi init via wolfram platform backend
-- [ ] Secure HTTPS GET to bsky.social (verify TLS and entropy on hardware)
+- [x] Secure HTTPS transport with CA validation and rotating entropy
+- [ ] Verify HTTPS GET to bsky.social on hardware
 - [x] GX rendering pipeline: framebuffer, 2D drawing, texture upload
 - [x] FreeType text rendering
 - [x] Session management UI and atomic credential persistence
