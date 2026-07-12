@@ -14,6 +14,7 @@
 #include "tab_bar.h"
 #include "../navigation/screens.h"
 #include "../render/font.h"
+#include "../render/palette.h"
 
 /* Bluesky brand colours */
 #define BLUE_R 0x1d
@@ -53,11 +54,11 @@ static void draw_quad(f32 x, f32 y, f32 w, f32 h, GXColor col) {
 
 void tab_bar_render(u8 active_tab) {
     /* dark background */
-    GXColor bg = {30, 30, 30, 255};
+    GXColor bg = CB_COLOR_RAISED;
     draw_quad(0.0f, 0.0f, 640.0f, (f32)TAB_HEIGHT, bg);
 
     /* divider line below tabs */
-    GXColor divider = {60, 60, 60, 255};
+    GXColor divider = CB_COLOR_BORDER;
     draw_quad(0.0f, (f32)(TAB_HEIGHT - 1), 640.0f, 1.0f, divider);
 
     for (u8 i = 0; i < TAB_COUNT; i++) {
@@ -69,9 +70,9 @@ void tab_bar_render(u8 active_tab) {
 
         GXColor text_col;
         if (i == active_tab) {
-            text_col.r = 255; text_col.g = 255; text_col.b = 255; text_col.a = 255;
+            text_col = CB_COLOR_TEXT;
         } else {
-            text_col.r = 190; text_col.g = 190; text_col.b = 195; text_col.a = 255;
+            text_col = CB_COLOR_MUTED;
         }
 
         /* centre-align text within tab */
@@ -81,7 +82,7 @@ void tab_bar_render(u8 active_tab) {
 
         /* active underline */
         if (i == active_tab) {
-            GXColor underline = {BLUE_R, BLUE_G, BLUE_B, 255};
+            GXColor underline = CB_COLOR_ACCENT;
             draw_quad(tab_x + 20.0f, (f32)(TAB_HEIGHT - UNDERLINE_H),
                       (f32)TAB_WIDTH - 40.0f, (f32)UNDERLINE_H, underline);
         }

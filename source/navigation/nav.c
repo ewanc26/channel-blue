@@ -19,6 +19,7 @@
 #include "../app/utf8.h"
 #include "../app/media.h"
 #include "../render/texcache.h"
+#include "../render/palette.h"
 
 static nav_state_t nav;
 static u8 nav_prev_tab;
@@ -108,8 +109,8 @@ static void nav_pop(void) {
 }
 
 static void render_empty(const char *message) {
-	GXColor text = {205, 205, 210, 255};
-	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 10, 15, 255});
+	GXColor text = CB_COLOR_MUTED;
+	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, CB_COLOR_SURFACE_DEEP);
 	draw_clipped_text(28, CONTENT_Y_TOP + 42, message, 78, text);
 }
 
@@ -117,11 +118,11 @@ static void render_feed(void) {
 	size_t first;
 	size_t end;
 	size_t i;
-	GXColor normal = {18, 20, 26, 255};
-	GXColor selected = {22, 56, 82, 255};
-	GXColor author = {235, 235, 235, 255};
-	GXColor body = {220, 220, 225, 255};
-	GXColor counts = {165, 195, 215, 255};
+	GXColor normal = CB_COLOR_SURFACE;
+	GXColor selected = CB_COLOR_ACCENT_SOFT;
+	GXColor author = CB_COLOR_TEXT;
+	GXColor body = CB_COLOR_TEXT;
+	GXColor counts = CB_COLOR_MUTED;
 
 	if (!feed || !feed->count) {
 		render_empty(feed_backend && feed_backend->fetch_timeline
@@ -138,9 +139,9 @@ static void render_feed(void) {
 		draw_quad(8, y + 3, 624, 82, i == feed->selected ? selected : normal);
 		/* Avatar thumbnail on the left; text is indented to clear it. */
 		cb_avatar_draw(post->avatar_url, 18, y + 10, 64,
-		               (GXColor){255, 255, 255, 255});
+		               CB_COLOR_TEXT);
 		cb_media_draw(post->media_url, 548, y + 10, 68, 64,
-		              (GXColor){255, 255, 255, 255});
+		              CB_COLOR_TEXT);
 		draw_clipped_text(92, y + 10, post->display_name ? post->display_name : post->author,
 		                  30, author);
 		draw_clipped_text(92, y + 34, post->text, 54, body);
@@ -154,11 +155,11 @@ static void render_thread(void) {
 	size_t first;
 	size_t end;
 	size_t i;
-	GXColor normal = {18, 20, 26, 255};
-	GXColor selected = {22, 56, 82, 255};
-	GXColor author = {235, 235, 235, 255};
-	GXColor body = {220, 220, 225, 255};
-	GXColor counts = {165, 195, 215, 255};
+	GXColor normal = CB_COLOR_SURFACE;
+	GXColor selected = CB_COLOR_ACCENT_SOFT;
+	GXColor author = CB_COLOR_TEXT;
+	GXColor body = CB_COLOR_TEXT;
+	GXColor counts = CB_COLOR_MUTED;
 
 	if (!thread_ctrl || !thread_ctrl->loaded) {
 		render_empty(thread_ctrl && thread_ctrl->last_status != CB_APP_OK
@@ -178,9 +179,9 @@ static void render_thread(void) {
 		char meta[72];
 		draw_quad(8, y + 3, 624, 82, i == thread_ctrl->selected ? selected : normal);
 		cb_avatar_draw(post->avatar_url, 18, y + 10, 64,
-		               (GXColor){255, 255, 255, 255});
+		               CB_COLOR_TEXT);
 		cb_media_draw(post->media_url, 548, y + 10, 68, 64,
-		              (GXColor){255, 255, 255, 255});
+		              CB_COLOR_TEXT);
 		draw_clipped_text(92, y + 10, post->display_name ? post->display_name : post->author,
 		                  30, author);
 		draw_clipped_text(92, y + 34, post->text, 54, body);
@@ -192,23 +193,23 @@ static void render_thread(void) {
 
 static void render_compose(void) {
 	char counter[24];
-	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){12, 14, 19, 255});
+	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, CB_COLOR_SURFACE_DEEP);
 	font_draw_text(22, CONTENT_Y_TOP + 18,
 	               draft && draft->replying ? "Replying to selected post" : "New post",
-	               FONT_SIZE_HINTS, (GXColor){110, 175, 220, 255});
-	draw_quad(18, CONTENT_Y_TOP + 48, 604, 172, (GXColor){25, 28, 35, 255});
+	               FONT_SIZE_HINTS, CB_COLOR_ACCENT);
+	draw_quad(18, CONTENT_Y_TOP + 48, 604, 172, CB_COLOR_RAISED);
 	draw_clipped_text(30, CONTENT_Y_TOP + 66,
 	                  draft && draft->length ? draft->text : "Type with a USB keyboard...",
-	                  82, (GXColor){225, 225, 228, 255});
+	                  82, CB_COLOR_TEXT);
 	snprintf(counter, sizeof(counter), "%u / %u",
 	         draft ? (unsigned)cb_utf8_count(draft->text) : 0,
 	         (unsigned)CB_POST_TEXT_GRAPHEMES_MAX);
 	font_draw_text(520, CONTENT_Y_TOP + 228, counter, FONT_SIZE_HINTS,
-	               (GXColor){130, 130, 135, 255});
+	               CB_COLOR_DIM);
 	if (draft && draft->last_status != CB_APP_OK)
 		font_draw_text(22, CONTENT_Y_TOP + 270,
 		               "Send failed; draft kept. Check network and retry.",
-		               FONT_SIZE_HINTS, (GXColor){230, 120, 110, 255});
+		               FONT_SIZE_HINTS, CB_COLOR_ERROR);
 }
 
 static void render_login_field(f32 y, const char *label, const char *value,
@@ -222,16 +223,15 @@ static void render_login_field(f32 y, const char *label, const char *value,
 		value = masked;
 	}
 	font_draw_text(54, y, label, FONT_SIZE_HINTS,
-	               selected ? (GXColor){80, 175, 235, 255}
-	                        : (GXColor){150, 150, 155, 255});
+	               selected ? CB_COLOR_ACCENT_HOVER : CB_COLOR_MUTED);
 	draw_quad(50, y + 24, 540, 38,
-	          selected ? (GXColor){25, 55, 75, 255} : (GXColor){28, 30, 36, 255});
+	          selected ? CB_COLOR_ACCENT_SOFT : CB_COLOR_RAISED);
 	draw_clipped_text(62, y + 33, value && value[0] ? value : "(empty)", 68,
-	                  (GXColor){225, 225, 228, 255});
+	                  CB_COLOR_TEXT);
 }
 
 static void render_login(void) {
-	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 12, 17, 255});
+	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, CB_COLOR_SURFACE_DEEP);
 	if (!login_form) return;
 	render_login_field(CONTENT_Y_TOP + 12, "PDS service", login_form->service,
 	                   login_form->active_field == CB_LOGIN_SERVICE, 0);
@@ -241,7 +241,7 @@ static void render_login(void) {
 	                   login_form->active_field == CB_LOGIN_PASSWORD, 1);
 	font_draw_text(54, CONTENT_Y_TOP + 258,
 	               "Use an app password. It is never saved to SD.",
-	               FONT_SIZE_HINTS, (GXColor){140, 165, 180, 255});
+	               FONT_SIZE_HINTS, CB_COLOR_MUTED);
 	if (login_form->last_status != CB_APP_OK)
 		font_draw_text(54, CONTENT_Y_TOP + 292,
 		               login_form->last_status == CB_APP_CONFIGURATION
@@ -249,18 +249,18 @@ static void render_login(void) {
 		               : login_form->last_status == CB_APP_NOT_IMPLEMENTED
 		               ? "This operation is not available on Wii yet."
 		               : "Sign-in failed. Check details/network and retry.",
-		               FONT_SIZE_HINTS, (GXColor){230, 120, 110, 255});
+		               FONT_SIZE_HINTS, CB_COLOR_ERROR);
 }
 
 static void render_notifications(void) {
 	size_t first;
 	size_t end;
 	size_t i;
-	GXColor normal = {18, 20, 26, 255};
-	GXColor selected = {22, 56, 82, 255};
-	GXColor author = {235, 235, 235, 255};
-	GXColor body = {220, 220, 225, 255};
-	GXColor reason = {165, 215, 245, 255};
+	GXColor normal = CB_COLOR_SURFACE;
+	GXColor selected = CB_COLOR_ACCENT_SOFT;
+	GXColor author = CB_COLOR_TEXT;
+	GXColor body = CB_COLOR_TEXT;
+	GXColor reason = CB_COLOR_ACCENT_HOVER;
 
 	if (!notifications || !notifications->loaded) {
 		if (notifications && notifications->last_status == CB_APP_NETWORK)
@@ -284,7 +284,7 @@ static void render_notifications(void) {
 		char meta[96];
 		draw_quad(8, y + 3, 624, 82, i == notifications->selected ? selected : normal);
 		cb_avatar_draw(note->avatar_url, 18, y + 10, 64,
-		               (GXColor){255, 255, 255, 255});
+		               CB_COLOR_TEXT);
 		snprintf(meta, sizeof(meta), "%s  %s",
 		         note->display_name ? note->display_name
 		                            : (note->author ? note->author : ""),
@@ -297,39 +297,39 @@ static void render_notifications(void) {
 }
 
 static void render_search(void) {
-	GXColor normal = {18, 20, 26, 255};
-	GXColor selected = {22, 56, 82, 255};
-	GXColor author = {235, 235, 235, 255};
-	GXColor body = {220, 220, 225, 255};
-	GXColor field = {25, 28, 35, 255};
+	GXColor normal = CB_COLOR_SURFACE;
+	GXColor selected = CB_COLOR_ACCENT_SOFT;
+	GXColor author = CB_COLOR_TEXT;
+	GXColor body = CB_COLOR_TEXT;
+	GXColor field = CB_COLOR_RAISED;
 	f32 list_top = CONTENT_Y_TOP + 56.0f;
 	size_t first;
 	size_t end;
 	size_t i;
 
-	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 12, 16, 255});
+	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, CB_COLOR_SURFACE_DEEP);
 	/* query field */
 	draw_quad(18, CONTENT_Y_TOP + 18, 604, 34, field);
 	draw_clipped_text(30, CONTENT_Y_TOP + 27,
 	                  search && search->query_length ? search->query
 	                                                 : "Type a name, then + to search",
-	                  78, (GXColor){225, 225, 228, 255});
+	                  78, CB_COLOR_TEXT);
 
 	if (!search || !search->loaded) {
 		if (search && search->last_status == CB_APP_NETWORK)
 			draw_clipped_text(28, CONTENT_Y_TOP + 92,
 			                  "Network unavailable. Check connection and retry.", 76,
-			                  (GXColor){150, 150, 150, 255});
+			                  CB_COLOR_DIM);
 		else
 			draw_clipped_text(28, CONTENT_Y_TOP + 92,
 			                  "Enter a search above, then press + to search.", 76,
-			                  (GXColor){150, 150, 150, 255});
+			                  CB_COLOR_DIM);
 		return;
 	}
 	if (!search->count) {
 		draw_clipped_text(28, CONTENT_Y_TOP + 92,
 		                  "No accounts matched your search.", 76,
-		                  (GXColor){150, 150, 150, 255});
+		                  CB_COLOR_DIM);
 		return;
 	}
 	first = (search->selected / 4) * 4;
@@ -340,7 +340,7 @@ static void render_search(void) {
 		char meta[96];
 		draw_quad(8, y + 3, 624, 70, i == search->selected ? selected : normal);
 		cb_avatar_draw(result->avatar_url, 18, y + 9, 54,
-		               (GXColor){255, 255, 255, 255});
+		               CB_COLOR_TEXT);
 		draw_clipped_text(82, y + 10,
 		                  result->display_name ? result->display_name
 		                                       : result->handle, 72, author);
@@ -350,9 +350,9 @@ static void render_search(void) {
 }
 
 static void render_profile(void) {
-	GXColor label = {195, 195, 202, 255};
-	GXColor value = {225, 225, 228, 255};
-	GXColor accent = {29, 155, 240, 255};
+	GXColor label = CB_COLOR_MUTED;
+	GXColor value = CB_COLOR_TEXT;
+	GXColor accent = CB_COLOR_ACCENT;
 	char counts[96];
 
 	if (!profile || !profile->loaded) {
@@ -364,9 +364,9 @@ static void render_profile(void) {
 			render_empty("Sign in to view your profile. Press + to load.");
 		return;
 	}
-	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 12, 16, 255});
+	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, CB_COLOR_SURFACE_DEEP);
 	cb_avatar_draw(profile->profile.avatar_url, 28, CONTENT_Y_TOP + 18, 72,
-	               (GXColor){255, 255, 255, 255});
+	               CB_COLOR_TEXT);
 	draw_clipped_text(118, CONTENT_Y_TOP + 20,
 	                  profile->profile.display_name ? profile->profile.display_name
 	                                               : profile->profile.handle,
@@ -391,19 +391,18 @@ static void render_session_menu(void) {
 		"Resume Channel Blue", "Sign out and clear session", "Exit to Wii Menu"
 	};
 	size_t i;
-	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 12, 16, 255});
+	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, CB_COLOR_SURFACE_DEEP);
 	if (authentication && authentication->state == CB_AUTH_READY &&
 	    authentication->session.handle)
 		draw_clipped_text(28, CONTENT_Y_TOP + 24,
 		                  authentication->session.handle, 72,
-		                  (GXColor){130, 190, 230, 255});
+		                  CB_COLOR_ACCENT_HOVER);
 	for (i = 0; i < CB_SESSION_MENU_COUNT; i++) {
 		f32 y = CONTENT_Y_TOP + 70.0f + (f32)i * 64.0f;
 		draw_quad(22, y, 596, 50,
-		          i == session_menu.selected ? (GXColor){22, 56, 82, 255}
-		                                     : (GXColor){25, 28, 35, 255});
+		          i == session_menu.selected ? CB_COLOR_ACCENT_SOFT : CB_COLOR_RAISED);
 		draw_clipped_text(40, y + 15, labels[i], 72,
-		                  (GXColor){225, 225, 228, 255});
+		                  CB_COLOR_TEXT);
 	}
 }
 
@@ -421,9 +420,9 @@ static void render_hints(screen_id_t screen) {
 	else if (screen == SCREEN_PROFILE) hints = "1: Follow/Unfollow   +: Reload   B: Back";
 	else if (screen == SCREEN_SESSION_MENU) hints = "Up/Down: Choose   A: Select   Home/B: Resume";
 	draw_quad(0, 480 - HINTS_BAR_HEIGHT, 640, HINTS_BAR_HEIGHT,
-	          (GXColor){20, 20, 20, 255});
+	          CB_COLOR_RAISED);
 	draw_clipped_text(14, 480 - HINTS_BAR_HEIGHT + 4, hints, 80,
-	                  (GXColor){130, 130, 130, 255});
+	                  CB_COLOR_DIM);
 }
 
 void nav_init(void) {

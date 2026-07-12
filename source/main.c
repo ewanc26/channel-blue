@@ -20,6 +20,7 @@
 #include <wolfram/wii.h>
 
 #include "navigation/nav.h"
+#include "render/palette.h"
 #include "app/auth.h"
 #include "app/timeline.h"
 #include "app/compose.h"
@@ -89,7 +90,7 @@ static void gx_init(void) {
     GX_Init(fifoBuffer, GX_FIFO_SIZE);
 
     /* clear colour: black */
-    GXColor background = {0, 0, 0, 255};
+    GXColor background = CB_COLOR_SURFACE_DEEP;
     GX_SetCopyClear(background, 0x00ffffff);
 
     /* viewport + display copy setup */

@@ -9,6 +9,7 @@
 #include "header_bar.h"
 #include "../navigation/screens.h"
 #include "../render/font.h"
+#include "../render/palette.h"
 
 /* Bluesky brand colours */
 #define BLUE_R 0x1d
@@ -55,7 +56,7 @@ static void draw_quad(f32 x, f32 y, f32 w, f32 h, GXColor col) {
  * Positioned at x=8, vertically centred in the header.
  */
 static void draw_back_arrow(f32 x, f32 y_center) {
-    GXColor arrow = {180, 180, 180, 255};
+    GXColor arrow = CB_COLOR_MUTED;
     f32 bar_w = 3.0f;
     f32 bar_h = 14.0f;
     f32 y = y_center - bar_h * 0.5f;
@@ -66,11 +67,11 @@ static void draw_back_arrow(f32 x, f32 y_center) {
 
 void header_bar_render(u16 y, screen_id_t screen, u8 stack_depth) {
     /* background */
-    GXColor bg = {40, 40, 40, 255};
+    GXColor bg = CB_COLOR_RAISED;
     draw_quad(0.0f, (f32)y, (f32)HEADER_WIDTH, (f32)HEADER_HEIGHT, bg);
 
     /* bottom divider */
-    GXColor divider = {60, 60, 60, 255};
+    GXColor divider = CB_COLOR_BORDER;
     draw_quad(0.0f, (f32)(y + HEADER_HEIGHT - 1), (f32)HEADER_WIDTH, 1.0f, divider);
 
     /* back arrow (only if we can go back) */
@@ -84,7 +85,7 @@ void header_bar_render(u16 y, screen_id_t screen, u8 stack_depth) {
         f32 text_x = 320.0f - (f32)tw * 0.5f;
         f32 text_y = (f32)y + 6.0f;
 
-        GXColor text_col = {255, 255, 255, 255};
+        GXColor text_col = CB_COLOR_TEXT;
         font_draw_text(text_x, text_y, screen_title_labels[screen],
                        FONT_SIZE_HEADER, text_col);
     }
