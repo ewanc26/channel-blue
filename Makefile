@@ -22,6 +22,7 @@ DATA		:=	data
 PROJECT_ROOT	:=	$(patsubst %/,%,$(dir $(abspath $(firstword $(MAKEFILE_LIST)))))
 WOLFRAM_DIR	?=	$(abspath $(PROJECT_ROOT)/../wolfram)
 WOLFRAM_BUILD	?=	$(WOLFRAM_DIR)/build-wii
+WOLFRAM_PORTLIBS ?= $(WOLFRAM_DIR)/build-wii-mbedtls
 HOST_WOLFRAM_BUILD ?= $(WOLFRAM_DIR)/build
 INCLUDES	:=
 
@@ -30,6 +31,7 @@ INCLUDES	:=
 #---------------------------------------------------------------------------------
 CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE) \
 	-I$(WOLFRAM_DIR)/include -I$(WOLFRAM_BUILD)/_deps/cjson-src \
+	-I$(WOLFRAM_PORTLIBS)/include \
 	-I$(DEVKITPRO)/portlibs/ppc/include \
 	-I$(DEVKITPRO)/portlibs/ppc/include/freetype2
 CXXFLAGS	=	$(CFLAGS)
@@ -42,6 +44,11 @@ LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map
 LIBS	:=	$(WOLFRAM_BUILD)/libwolfram.a \
 		$(WOLFRAM_BUILD)/_deps/cjson-build/libcjson.a \
 		$(WOLFRAM_BUILD)/_deps/libcbor-build/src/libcbor.a \
+		$(WOLFRAM_PORTLIBS)/lib/libmbedtls.a \
+		$(WOLFRAM_PORTLIBS)/lib/libmbedx509.a \
+		$(WOLFRAM_PORTLIBS)/lib/libmbedcrypto.a \
+		$(WOLFRAM_PORTLIBS)/lib/libmbedx509.a \
+		$(WOLFRAM_PORTLIBS)/lib/libmbedcrypto.a \
 		-lfreetype -lpng -ljpeg -lz -lbz2 -lbrotlidec -lbrotlicommon \
 		-lfat -lwiikeyboard -lwiiuse -lbte -logc -lm
 
@@ -49,7 +56,7 @@ LIBS	:=	$(WOLFRAM_BUILD)/libwolfram.a \
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:=	$(DEVKITPRO)/portlibs/ppc $(WOLFRAM_BUILD) \
+LIBDIRS	:=	$(DEVKITPRO)/portlibs/ppc $(WOLFRAM_PORTLIBS) $(WOLFRAM_BUILD) \
 		$(WOLFRAM_BUILD)/_deps/cjson-build \
 		$(WOLFRAM_BUILD)/_deps/libcbor-build/src
 
@@ -115,7 +122,9 @@ export OUTPUT	:=	$(CURDIR)/$(TARGET)
 VERSION		:=	$(shell git -C $(CURDIR) describe --tags 2>/dev/null || git -C $(CURDIR) rev-parse --short HEAD)
 DISTDIR		:=	/Volumes/Storage/Wii software
 
-.PHONY: $(BUILD) clean release test
+BUNDLEDIR	:=	dist/apps/channel-blue
+
+.PHONY: $(BUILD) clean bundle dolphin release test
 
 #---------------------------------------------------------------------------------
 $(BUILD):
@@ -131,6 +140,24 @@ clean:
 run:
 	wiiload $(TARGET).dol
 
+dolphin: $(OUTPUT).dol
+	@mkdir -p build-dolphin-user
+	@arch -x86_64 /Applications/Dolphin.app/Contents/MacOS/Dolphin \
+		-u build-dolphin-user -C Dolphin.Core.WiiSDCard=True \
+		-e $(OUTPUT).dol
+
+# Build an installable Homebrew Channel tree. The entropy seed is generated
+# once and deliberately retained across rebuilds; replacing it outside the
+# application's rotation protocol could repeat the DRBG state.
+bundle: $(OUTPUT).dol
+	@mkdir -p "$(BUNDLEDIR)"
+	@cp $(OUTPUT).dol "$(BUNDLEDIR)/boot.dol"
+	@cp meta.xml icon.png "$(BUNDLEDIR)/"
+	@if [ ! -f "$(BUNDLEDIR)/entropy.bin" ]; then \
+		openssl rand 64 > "$(BUNDLEDIR)/entropy.bin"; \
+	fi
+	@echo bundle: ready at "$(BUNDLEDIR)"
+
 #---------------------------------------------------------------------------------
 release: $(OUTPUT).dol
 	@echo release: copying bundle to "$(DISTDIR)"
@@ -143,6 +170,10 @@ release: $(OUTPUT).dol
 # Host-side tests cover pure application modules without requiring Wii hardware.
 test:
 	@mkdir -p build-host
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_entropy_seed.c source/app/entropy_seed.c \
+		-o build-host/test_entropy_seed
+	@build-host/test_entropy_seed
 	@cc -std=c99 -Wall -Wextra -Werror -Isource \
 		tests/test_session_store.c source/app/session_store.c \
 		-o build-host/test_session_store

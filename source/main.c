@@ -14,13 +14,16 @@
 #include <wiikeyboard/keyboard.h>
 #include <fat.h>
 #include <sdcard/wiisd_io.h>
+#include <ogc/lwp.h>
 #include <wolfram/platform.h>
+#include <wolfram/wii.h>
 
 #include "navigation/nav.h"
 #include "app/auth.h"
 #include "app/timeline.h"
 #include "app/compose.h"
 #include "app/login.h"
+#include "app/entropy_seed.h"
 #include "integration/wolfram_backend.h"
 #include "render/font.h"
 #include "render/image.h"
@@ -28,12 +31,48 @@
 
 /* 256 KB GX command FIFO — generous for a 2D text-heavy UI */
 #define GX_FIFO_SIZE (256 * 1024)
+#define CB_ENTROPY_SEED_PATH "sd:/apps/channel-blue/entropy.bin"
 
 static void *frameBuffer[2] = {NULL, NULL};
 static GXRModeObj *rmode = NULL;
+static unsigned char network_stack[64 * 1024] ATTRIBUTE_ALIGN(32);
+static volatile int network_init_done;
+static volatile wf_status network_init_status = WF_ERR_NETWORK;
+static volatile int entropy_init_ready;
+static int startup_sd_mounted;
+
+static int provision_wolfram_entropy(void);
+
+static void *network_init_thread(void *unused) {
+    (void)unused;
+    if (startup_sd_mounted)
+        entropy_init_ready = provision_wolfram_entropy();
+    network_init_status = wf_platform_init();
+    __sync_synchronize();
+    network_init_done = 1;
+    return NULL;
+}
 
 static void keyboard_keypress(char symbol) {
     nav_handle_key((unsigned char)symbol);
+}
+
+static int provision_wolfram_entropy(void) {
+    unsigned char seed[CB_ENTROPY_SEED_SIZE];
+    wf_status status;
+
+    if (!cb_entropy_seed_load(CB_ENTROPY_SEED_PATH, seed)) return 0;
+    status = wf_wii_set_entropy_seed(seed, sizeof(seed));
+    memset(seed, 0, sizeof(seed));
+    if (status != WF_OK) return 0;
+    status = wf_wii_rotate_entropy_seed(seed, sizeof(seed));
+    if (status != WF_OK) return 0;
+    if (!cb_entropy_seed_save(CB_ENTROPY_SEED_PATH, seed)) {
+        memset(seed, 0, sizeof(seed));
+        return 0;
+    }
+    memset(seed, 0, sizeof(seed));
+    return wf_wii_commit_entropy_rotation() == WF_OK;
 }
 
 /*
@@ -79,10 +118,12 @@ static void gx_init(void) {
     /* vertex descriptor: direct f32 XY positions, no tex coords */
     GX_ClearVtxDesc();
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_F32, 0);
+    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
     GX_SetNumChans(1);
+    GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_REG, GX_SRC_REG,
+                   GX_LIGHTNULL, GX_DF_NONE, GX_AF_NONE);
     GX_SetNumTexGens(0);
-    GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORDNULL, GX_TEXMAP_NULL, GX_COLORNULL);
+    GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORDNULL, GX_TEXMAP_NULL, GX_COLOR0A0);
     GX_SetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
 }
 
@@ -108,14 +149,15 @@ int main(int argc, char **argv) {
     cb_auth_backend auth_backend;
     cb_timeline_backend backend;
     cb_login_form login;
+    lwp_t network_thread = LWP_THREAD_NULL;
+    int resume_attempted = 0;
 
     /* --- video init --- */
     VIDEO_Init();
     WPAD_Init();
     KEYBOARD_Init(keyboard_keypress);
     sd_mounted = fatMountSimple("sd", &__io_wiisd);
-    wf_platform_init();
-
+    startup_sd_mounted = sd_mounted;
     rmode = VIDEO_GetPreferredMode(NULL);
 
     frameBuffer[0] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
@@ -151,17 +193,35 @@ int main(int argc, char **argv) {
     cb_timeline_init(&timeline);
     cb_compose_init(&compose, 0);
     cb_login_form_init(&login);
-    if (sd_mounted)
-        cb_auth_resume(&auth, &auth_backend, &wolfram,
-                       "sd:/apps/channel-blue/session.dat");
     nav_bind_timeline(&timeline, &compose, &backend, &wolfram);
     nav_bind_auth(&auth, &login, &auth_backend,
                   "sd:/apps/channel-blue/session.dat");
+    if (LWP_CreateThread(&network_thread, network_init_thread, NULL,
+                         network_stack, sizeof(network_stack), 64) != LWP_SUCCESSFUL) {
+        network_init_done = 1;
+        network_init_status = WF_ERR_NETWORK;
+    }
 
     u32 fb = 0; /* current framebuffer index */
 
     /* --- main loop --- */
     while (SYS_MainLoop()) {
+        if (network_init_done && !resume_attempted) {
+            __sync_synchronize();
+            resume_attempted = 1;
+            cb_wolfram_context_set_network_ready(
+                &wolfram, network_init_status == WF_OK && entropy_init_ready);
+            if (!entropy_init_ready) {
+                login.last_status = CB_APP_CONFIGURATION;
+            } else if (network_init_status == WF_OK && sd_mounted) {
+                if (cb_auth_resume(&auth, &auth_backend, &wolfram,
+                                   "sd:/apps/channel-blue/session.dat") == CB_APP_OK)
+                    nav_bind_auth(&auth, &login, &auth_backend,
+                                  "sd:/apps/channel-blue/session.dat");
+            } else if (network_init_status != WF_OK) {
+                login.last_status = CB_APP_NETWORK;
+            }
+        }
         WPAD_ScanPads();
 
         u32 pressed = WPAD_ButtonsDown(0);
@@ -188,7 +248,8 @@ int main(int argc, char **argv) {
     cb_timeline_free(&timeline);
     cb_auth_free(&auth);
     cb_wolfram_context_free(&wolfram);
-    wf_platform_shutdown();
+    if (network_init_done && network_init_status == WF_OK)
+        wf_platform_shutdown();
     if (sd_mounted) fatUnmount("sd");
     KEYBOARD_Deinit();
     font_shutdown();

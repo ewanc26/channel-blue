@@ -36,6 +36,7 @@ static const char *screen_title_labels[SCREEN_COUNT] = {
  * TODO(gx): extract into a shared gx_draw.c helper to avoid duplication.
  */
 static void draw_quad(f32 x, f32 y, f32 w, f32 h, GXColor col) {
+    GX_SetChanMatColor(GX_COLOR0A0, col);
     GX_Begin(GX_TRIANGLES, GX_VTXFMT0, 6);
         GX_Position3f32(x,     y,     0.0f);
         GX_Position3f32(x + w, y,     0.0f);
