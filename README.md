@@ -161,7 +161,7 @@ the active sign-in field; Enter submits. Passwords are masked and never saved.
 - [x] Wolfram-backed like, repost, and follow operations
 - [ ] Fetch and display avatar thumbnails
 - [ ] Replace placeholder search, notifications, and profile tabs
-- [ ] Error handling and WiFi retry logic
+- [x] Error handling and WiFi retry logic (bounded exponential backoff on transient errors)
 
 ## Contributing
 

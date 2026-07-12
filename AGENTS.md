@@ -122,4 +122,4 @@ complete `.dol` links and the UI boots in Dolphin. The immediate next steps are:
 - [x] Wolfram-backed social actions (like, repost, follow)
 - [ ] Avatar network fetch and thumbnail rendering
 - [ ] Search, notifications, and profile tabs
-- [ ] Error handling and retry logic for flaky WiFi
+- [x] Error handling and retry logic for flaky WiFi (bounded exponential backoff on transient errors)
