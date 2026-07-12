@@ -2,6 +2,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+#include "../app/retry.h"
 
 static char *copy(const char *value) {
 	size_t length;
@@ -76,14 +79,56 @@ void cb_wolfram_context_set_network_ready(cb_wolfram_context *context,
 	if (context) context->network_ready = ready != 0;
 }
 
+/* Wii WiFi is 802.11b/g over IOS and transient failures are common, so network
+ * calls retry with capped exponential backoff before surfacing an error. */
+#define CB_NETWORK_MAX_ATTEMPTS 4
+
+static int cb_wolfram_transient(cb_retry_status status) {
+	switch ((wf_status)status) {
+	case WF_ERR_NETWORK:
+	case WF_ERR_TIMEOUT:
+	case WF_ERR_WOULD_BLOCK:
+	case WF_ERR_RATE_LIMIT:
+	case WF_ERR_UNKNOWN:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+static unsigned cb_network_backoff_ms(int attempt) {
+	unsigned delay = 500u << attempt;
+	return delay > 8000u ? 8000u : delay;
+}
+
+static void cb_network_sleep_ms(unsigned ms) {
+	usleep(ms * 1000);
+}
+
+typedef struct {
+	wf_bsky_agent *agent;
+	const char *service;
+	const char *identifier;
+	const char *password;
+} login_ctx;
+
+static cb_retry_status login_op(void *ctx) {
+	login_ctx *c = ctx;
+	return (cb_retry_status)wf_bsky_agent_login(c->agent, c->service,
+	                                            c->identifier, c->password);
+}
+
 static cb_app_status backend_login(void *opaque, const char *service,
 	                               const char *identifier, const char *password,
 	                               cb_session_data *out) {
 	cb_wolfram_context *context = opaque;
+	login_ctx lc = {&context->agent, service, identifier, password};
 	wf_status status;
 	if (!context) return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
-	status = wf_bsky_agent_login(&context->agent, service, identifier, password);
+	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
+	                             login_op, &lc, cb_network_backoff_ms,
+	                             cb_network_sleep_ms);
 	if (status != WF_OK) return status_from_wolfram(status);
 	return export_session(context, service, out);
 }
@@ -160,15 +205,31 @@ cb_app_status cb_wolfram_convert_feed(const wf_agent_feed_list *feed,
 	return CB_APP_OK;
 }
 
+typedef struct {
+	wf_bsky_agent *agent;
+	int limit;
+	const char *cursor;
+	wf_agent_feed_list *feed;
+} fetch_ctx;
+
+static cb_retry_status fetch_timeline_op(void *ctx) {
+	fetch_ctx *c = ctx;
+	return (cb_retry_status)wf_bsky_agent_get_timeline(c->agent, c->limit,
+	                                                  c->cursor, c->feed);
+}
+
 static cb_app_status backend_fetch(void *opaque, const char *cursor, size_t limit,
 	                               cb_timeline_page *out) {
 	cb_wolfram_context *context = opaque;
 	wf_agent_feed_list feed = {0};
+	fetch_ctx fc = {&context->agent, (int)limit, cursor, &feed};
 	wf_status status;
 	cb_app_status converted;
 	if (!context || !context->agent.agent) return CB_APP_INVALID;
 	if (!context->network_ready) return CB_APP_NETWORK;
-	status = wf_bsky_agent_get_timeline(&context->agent, (int)limit, cursor, &feed);
+	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
+	                             fetch_timeline_op, &fc, cb_network_backoff_ms,
+	                             cb_network_sleep_ms);
 	if (status != WF_OK) return status_from_wolfram(status);
 	converted = cb_wolfram_convert_feed(&feed, out);
 	wf_agent_feed_list_free(&feed);
