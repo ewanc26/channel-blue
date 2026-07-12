@@ -43,6 +43,86 @@ static const cb_thread_backend *thread_backend;
 static void *thread_context;
 static cb_session_menu session_menu;
 static int exit_requested;
+static f32 pointer_x = 320.0f;
+static f32 pointer_y = 240.0f;
+static int pointer_valid;
+static void draw_quad(f32 x, f32 y, f32 w, f32 h, GXColor col);
+
+static const char *keyboard_rows[] = {
+	"1234567890",
+	"qwertyuiop",
+	"asdfghjkl",
+	"zxcvbnm.-_"
+};
+
+static void keyboard_render(void) {
+	int row;
+	if (nav_get_current_screen() != SCREEN_LOGIN &&
+	    nav_get_current_screen() != SCREEN_SEARCH &&
+	    nav_get_current_screen() != SCREEN_COMPOSE) return;
+	for (row = 0; row < 4; row++) {
+		int len = (int)strlen(keyboard_rows[row]);
+		int col;
+		f32 key_w = 54.0f;
+		f32 start_x = (640.0f - key_w * len) * 0.5f;
+		f32 y = 306.0f + row * 35.0f;
+		for (col = 0; col < len; col++) {
+			char label[2] = { keyboard_rows[row][col], '\0' };
+			GXColor bg = CB_COLOR_RAISED;
+			if (pointer_x >= start_x + col * key_w &&
+			    pointer_x < start_x + (col + 1) * key_w &&
+			    pointer_y >= y && pointer_y < y + 30.0f)
+				bg = CB_COLOR_ACCENT_SOFT;
+			draw_quad(start_x + col * key_w + 2.0f, y, key_w - 4.0f, 30.0f, bg);
+			font_draw_text(start_x + col * key_w + 22.0f, y + 7.0f,
+			               label, FONT_SIZE_HINTS, CB_COLOR_TEXT);
+		}
+	}
+	draw_quad(164.0f, 448.0f, 150.0f, 26.0f, CB_COLOR_RAISED);
+	draw_quad(326.0f, 448.0f, 150.0f, 26.0f, CB_COLOR_RAISED);
+	font_draw_text(218.0f, 453.0f, "Space", FONT_SIZE_HINTS, CB_COLOR_TEXT);
+	font_draw_text(375.0f, 453.0f, "Back", FONT_SIZE_HINTS, CB_COLOR_TEXT);
+}
+
+static void pointer_render(void) {
+	if (!pointer_valid) return;
+	draw_quad(pointer_x - 1.0f, pointer_y - 10.0f, 3.0f, 20.0f, CB_COLOR_TEXT);
+	draw_quad(pointer_x - 10.0f, pointer_y - 1.0f, 20.0f, 3.0f, CB_COLOR_TEXT);
+}
+
+void nav_pointer_update(f32 x, f32 y, int valid, int clicked) {
+	int row, col;
+	pointer_valid = valid;
+	if (valid) {
+		pointer_x = x < 0.0f ? 0.0f : x > 639.0f ? 639.0f : x;
+		pointer_y = y < 0.0f ? 0.0f : y > 479.0f ? 479.0f : y;
+	}
+	if (!clicked || !valid) return;
+	if (pointer_y < TAB_BAR_HEIGHT) {
+		nav.active_tab = (u8)(pointer_x / 160.0f);
+		return;
+	}
+	if (nav_get_current_screen() == SCREEN_LOGIN && pointer_y >= CONTENT_Y_TOP + 24.0f &&
+	    pointer_y < CONTENT_Y_TOP + 240.0f && login_form) {
+		int field = (int)((pointer_y - (CONTENT_Y_TOP + 24.0f)) / 76.0f);
+		if (field >= 0 && field < 3) login_form->active_field = (cb_login_field)field;
+	}
+	for (row = 0; row < 4; row++) {
+		int len = (int)strlen(keyboard_rows[row]);
+		f32 key_w = 54.0f;
+		f32 start_x = (640.0f - key_w * len) * 0.5f;
+		f32 ky = 306.0f + row * 35.0f;
+		if (pointer_y < ky || pointer_y >= ky + 30.0f) continue;
+		col = (int)((pointer_x - start_x) / key_w);
+		if (col >= 0 && col < len)
+			nav_handle_key((unsigned int)keyboard_rows[row][col]);
+		return;
+	}
+	if (pointer_y >= 448.0f && pointer_y < 478.0f) {
+		if (pointer_x >= 164.0f && pointer_x < 314.0f) nav_handle_key(' ');
+		else if (pointer_x >= 326.0f && pointer_x < 476.0f) nav_handle_key(8);
+	}
+}
 
 static void cache_avatar(const char *url) {
 	if (url && discovery_context)
@@ -764,7 +844,9 @@ void nav_render(void) {
 	else if (current == SCREEN_PROFILE) render_profile();
 	else if (current == SCREEN_SESSION_MENU) render_session_menu();
 	else render_placeholder(current);
+	keyboard_render();
 	render_hints(current);
+	pointer_render();
 }
 
 u8 nav_get_active_tab(void) { return nav.active_tab; }

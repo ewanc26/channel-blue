@@ -70,6 +70,10 @@ void nav_bind_thread(cb_thread *thread_ctrl, const cb_thread_backend *backend,
 /* handle one frame of input; called before render */
 void nav_handle_input(u32 pressed);
 
+/* Update the Wii Remote IR pointer and dispatch a pointer click. Coordinates
+ * are in the 640x480 virtual screen space. */
+void nav_pointer_update(f32 x, f32 y, int valid, int clicked);
+
 /* Feed one translated USB keyboard symbol into the compose screen. */
 void nav_handle_key(unsigned int symbol);
 

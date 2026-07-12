@@ -243,6 +243,8 @@ int main(int argc, char **argv) {
         }
         WPAD_ScanPads();
 
+        WPADData *wpad = WPAD_Data(0);
+
         expansion_t expansion;
         u32 raw_pressed = WPAD_ButtonsDown(0);
         u32 pressed;
@@ -253,7 +255,14 @@ int main(int argc, char **argv) {
             expansion.type == WPAD_EXP_CLASSIC ? expansion.classic.ljs.mag : 0.0f,
             expansion.type == WPAD_EXP_CLASSIC ? expansion.classic.ljs.ang : 0.0f,
             &input_repeat);
-        nav_handle_input(pressed);
+        nav_pointer_update(wpad && wpad->ir.valid ? wpad->ir.x : 0.0f,
+                           wpad && wpad->ir.valid ? wpad->ir.y : 0.0f,
+                           wpad && wpad->ir.valid,
+                           (raw_pressed & WPAD_BUTTON_A) != 0);
+        /* Pointer A clicks are dispatched by nav_pointer_update so they do
+         * not also trigger the button action for the current screen. */
+        if (!(wpad && wpad->ir.valid && (raw_pressed & WPAD_BUTTON_A)))
+            nav_handle_input(pressed);
 
         /* draw this frame */
         texcache_begin_frame();
