@@ -9,6 +9,8 @@
 #include "../components/tab_bar.h"
 #include "../components/header_bar.h"
 #include "../render/font.h"
+#include "../app/avatar.h"
+#include "../integration/wolfram_backend.h"
 
 static nav_state_t nav;
 static cb_timeline *feed;
@@ -85,12 +87,15 @@ static void render_feed(void) {
 		f32 y = CONTENT_Y_TOP + (f32)(i - first) * 88.0f;
 		char meta[72];
 		draw_quad(8, y + 3, 624, 82, i == feed->selected ? selected : normal);
-		draw_clipped_text(20, y + 10, post->display_name ? post->display_name : post->author,
-		                  46, author);
-		draw_clipped_text(20, y + 34, post->text, 78, body);
+		/* Avatar thumbnail on the left; text is indented to clear it. */
+		cb_avatar_draw(post->avatar_url, 18, y + 10, 64,
+		               (GXColor){255, 255, 255, 255});
+		draw_clipped_text(92, y + 10, post->display_name ? post->display_name : post->author,
+		                  34, author);
+		draw_clipped_text(92, y + 34, post->text, 66, body);
 		snprintf(meta, sizeof(meta), "Replies %u   Reposts %u   Likes %u",
 		         post->reply_count, post->repost_count, post->like_count);
-		draw_clipped_text(20, y + 59, meta, 70, counts);
+		draw_clipped_text(92, y + 59, meta, 58, counts);
 	}
 }
 
@@ -103,9 +108,11 @@ static void render_thread(void) {
 		render_empty("This post is no longer available.");
 		return;
 	}
-	draw_clipped_text(24, CONTENT_Y_TOP + 24,
-	                  post->display_name ? post->display_name : post->author, 60, author);
-	draw_clipped_text(24, CONTENT_Y_TOP + 64, post->text, 82, body);
+	cb_avatar_draw(post->avatar_url, 24, CONTENT_Y_TOP + 24, 64,
+	               (GXColor){255, 255, 255, 255});
+	draw_clipped_text(100, CONTENT_Y_TOP + 28,
+	                  post->display_name ? post->display_name : post->author, 42, author);
+	draw_clipped_text(100, CONTENT_Y_TOP + 100, post->text, 56, body);
 	draw_clipped_text(24, CONTENT_Y_TOP + 112,
 	                  "A: Reply   +: Follow   1: Like   2: Repost", 70,
 	                  (GXColor){100, 165, 210, 255});
@@ -218,8 +225,10 @@ void nav_bind_auth(cb_auth *auth, cb_login_form *login,
 	if (auth && auth->state == CB_AUTH_READY) {
 		if (nav_get_current_screen() == SCREEN_LOGIN)
 			nav_pop();
-		if (feed && feed_backend && feed_backend->fetch_timeline)
+		if (feed && feed_backend && feed_backend->fetch_timeline) {
 			cb_timeline_refresh(feed, feed_backend, feed_context);
+			cb_avatar_prefetch_feed(feed, (cb_wolfram_context *)feed_context);
+		}
 	} else {
 		nav_push(SCREEN_LOGIN);
 	}
@@ -231,8 +240,10 @@ static void submit_login(void) {
 	if (cb_login_form_submit(login_form, authentication, authentication_backend,
 	                         feed_context, authentication_path) == CB_APP_OK) {
 		nav_pop();
-		if (feed && feed_backend && feed_backend->fetch_timeline)
+		if (feed && feed_backend && feed_backend->fetch_timeline) {
 			cb_timeline_refresh(feed, feed_backend, feed_context);
+			cb_avatar_prefetch_feed(feed, (cb_wolfram_context *)feed_context);
+		}
 	}
 }
 
@@ -275,6 +286,7 @@ void nav_handle_input(u32 pressed) {
 		    feed_backend && feed_backend->fetch_timeline) {
 			if (feed->has_more) cb_timeline_load_more(feed, feed_backend, feed_context);
 			else cb_timeline_refresh(feed, feed_backend, feed_context);
+			cb_avatar_prefetch_feed(feed, (cb_wolfram_context *)feed_context);
 		}
 		if (pressed & WPAD_BUTTON_PLUS && screen == SCREEN_THREAD)
 			cb_timeline_follow_selected(feed, feed_backend, feed_context);

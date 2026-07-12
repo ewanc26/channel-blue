@@ -71,7 +71,11 @@ void cb_wolfram_context_init(cb_wolfram_context *context) {
 }
 
 void cb_wolfram_context_free(cb_wolfram_context *context) {
-	if (context) wf_bsky_agent_free(&context->agent);
+	if (context) {
+		if (context->avatar_client)
+			wf_xrpc_client_free(context->avatar_client);
+		wf_bsky_agent_free(&context->agent);
+	}
 }
 
 void cb_wolfram_context_set_network_ready(cb_wolfram_context *context,
@@ -285,4 +289,73 @@ cb_timeline_backend cb_wolfram_timeline_backend(void) {
 		backend_fetch, backend_create, backend_like, backend_repost, backend_follow
 	};
 	return backend;
+}
+
+/* ------------------------------------------------------------------ */
+/* Avatar image fetch                                                  */
+/* ------------------------------------------------------------------ */
+
+/* Avatars are served from the Bluesky CDN (cdn.bsky.app) and peers. The fetch
+ * client never attaches auth, and wf_http_get ignores the client's base URL
+ * (it is given a complete URL), so any HTTPS origin works through one client. */
+#define CB_AVATAR_CLIENT_BASE "https://cdn.bsky.app"
+
+typedef struct {
+	wf_xrpc_client *client;
+	const char *url;
+	wf_response resp;   /* owned by the op only on a successful attempt */
+	int captured;
+} avatar_fetch_ctx;
+
+static cb_retry_status avatar_fetch_op(void *ctx) {
+	avatar_fetch_ctx *c = ctx;
+	wf_response resp = {0};
+	wf_status status = wf_http_get(c->client, c->url, &resp);
+	if (status != WF_OK) return (cb_retry_status)status;
+	/* An empty body is not a usable avatar image, even on a 2xx. Surface it
+	 * as a generic failure so the retry primitive can still back off once. */
+	if (!resp.body || resp.body_len == 0) {
+		wf_response_free(&resp);
+		return (cb_retry_status)WF_ERR_UNKNOWN;
+	}
+	c->resp = resp;
+	c->captured = 1;
+	return (cb_retry_status)WF_OK;
+}
+
+cb_app_status cb_wolfram_fetch_avatar(cb_wolfram_context *context,
+	                                  const char *avatar_url,
+	                                  unsigned char **out_bytes,
+	                                  size_t *out_len) {
+	avatar_fetch_ctx fc = {NULL, avatar_url, {0}, 0};
+	wf_status status;
+	unsigned char *buf;
+
+	if (!context || !avatar_url || !out_bytes || !out_len)
+		return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
+
+	if (!context->avatar_client) {
+		context->avatar_client =
+			wf_xrpc_client_new(CB_AVATAR_CLIENT_BASE);
+		if (!context->avatar_client) return CB_APP_ALLOC;
+	}
+	fc.client = context->avatar_client;
+
+	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
+	                             avatar_fetch_op, &fc, cb_network_backoff_ms,
+	                             cb_network_sleep_ms);
+	if (status != WF_OK || !fc.captured) return status_from_wolfram(status);
+
+	buf = malloc(fc.resp.body_len ? fc.resp.body_len : 1);
+	if (!buf) {
+		wf_response_free(&fc.resp);
+		return CB_APP_ALLOC;
+	}
+	memcpy(buf, fc.resp.body, fc.resp.body_len);
+	*out_len = fc.resp.body_len;
+	wf_response_free(&fc.resp);
+
+	*out_bytes = buf;
+	return CB_APP_OK;
 }
