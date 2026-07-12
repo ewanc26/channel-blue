@@ -202,11 +202,24 @@ test:
 		tests/test_login.c source/app/login.c source/app/auth.c \
 		source/app/session_store.c -o build-host/test_login
 	@build-host/test_login
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_notifications.c source/app/notifications.c \
+		-o build-host/test_notifications
+	@build-host/test_notifications
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_search.c source/app/search.c \
+		-o build-host/test_search
+	@build-host/test_search
+	@cc -std=c99 -Wall -Wextra -Werror -Isource \
+		tests/test_profile.c source/app/profile.c \
+		-o build-host/test_profile
+	@build-host/test_profile
 	@cc -std=c11 -Wall -Wextra -Werror -Isource -I$(WOLFRAM_DIR)/include \
 		-I$(HOST_WOLFRAM_BUILD)/_deps/cjson-src \
 		tests/test_wolfram_backend.c source/integration/wolfram_backend.c \
 		source/app/auth.c source/app/session_store.c source/app/timeline.c \
-		source/app/retry.c \
+		source/app/retry.c source/app/notifications.c source/app/search.c \
+		source/app/profile.c \
 		-L$(HOST_WOLFRAM_BUILD) -lwolfram \
 		-L$(HOST_WOLFRAM_BUILD)/_deps/cjson-build -lcjson \
 		-o build-host/test_wolfram_backend

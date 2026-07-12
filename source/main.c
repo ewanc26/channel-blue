@@ -186,14 +186,25 @@ int main(int argc, char **argv) {
     nav_init();
     cb_timeline timeline;
     cb_compose compose;
+    cb_notifications notifications;
+    cb_search search;
+    cb_profile profile;
     cb_wolfram_context_init(&wolfram);
     cb_auth_init(&auth);
     auth_backend = cb_wolfram_auth_backend();
     backend = cb_wolfram_timeline_backend();
+    cb_notifications_backend notes_backend = cb_wolfram_notifications_backend();
+    cb_search_backend search_backend = cb_wolfram_search_backend();
+    cb_profile_backend profile_backend = cb_wolfram_profile_backend();
     cb_timeline_init(&timeline);
     cb_compose_init(&compose, 0);
     cb_login_form_init(&login);
+    cb_notifications_init(&notifications);
+    cb_search_init(&search);
+    cb_profile_init(&profile);
     nav_bind_timeline(&timeline, &compose, &backend, &wolfram);
+    nav_bind_discovery(&notifications, &search, &profile, &notes_backend,
+                       &search_backend, &profile_backend, &wolfram);
     nav_bind_auth(&auth, &login, &auth_backend,
                   "sd:/apps/channel-blue/session.dat");
     if (LWP_CreateThread(&network_thread, network_init_thread, NULL,
@@ -246,6 +257,9 @@ int main(int argc, char **argv) {
     texcache_shutdown();
     image_shutdown();
     cb_timeline_free(&timeline);
+    cb_notifications_free(&notifications);
+    cb_search_free(&search);
+    cb_profile_free(&profile);
     cb_auth_free(&auth);
     cb_wolfram_context_free(&wolfram);
     if (network_init_done && network_init_status == WF_OK)

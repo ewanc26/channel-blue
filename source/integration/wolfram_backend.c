@@ -4,6 +4,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <cJSON.h>
+#include <wolfram/actor_typed.h>
+
 #include "../app/retry.h"
 
 static char *copy(const char *value) {
@@ -358,4 +361,210 @@ cb_app_status cb_wolfram_fetch_avatar(cb_wolfram_context *context,
 
 	*out_bytes = buf;
 	return CB_APP_OK;
+}
+
+cb_app_status cb_wolfram_convert_notifications(
+	const wf_agent_notification_list *source, cb_notifications_page *out) {
+	size_t i;
+	if (!source || !out || (source->notification_count && !source->notifications))
+		return CB_APP_INVALID;
+	memset(out, 0, sizeof(*out));
+	out->count = source->notification_count < CB_NOTIFICATIONS_CAPACITY
+	           ? source->notification_count : CB_NOTIFICATIONS_CAPACITY;
+	if (out->count) {
+		out->notes = calloc(out->count, sizeof(*out->notes));
+		if (!out->notes) return CB_APP_ALLOC;
+	}
+	for (i = 0; i < out->count; i++) {
+		const wf_agent_notification *src = &source->notifications[i];
+		const char *text = src->record
+		                 ? cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(
+		                       src->record, "text")) : NULL;
+		cb_notification *note = &out->notes[i];
+		size_t rlen;
+		if (!set_string(&note->uri, src->uri, 1) ||
+		    !set_string(&note->cid, src->cid, 1) ||
+		    !set_string(&note->author, src->author.handle, 1) ||
+		    !set_string(&note->display_name, src->author.display_name, 0) ||
+		    !set_string(&note->avatar_url, src->author.avatar, 0) ||
+		    !set_string(&note->indexed_at, src->indexed_at, 0) ||
+		    !set_string(&note->text, text, 0)) {
+			cb_notifications_page_free(out);
+			return CB_APP_ALLOC;
+		}
+		rlen = src->reason ? strlen(src->reason) : 0;
+		if (rlen > CB_NOTIF_REASON_MAX) rlen = CB_NOTIF_REASON_MAX;
+		if (rlen) memcpy(note->reason, src->reason, rlen);
+		note->reason[rlen] = '\0';
+		note->is_read = src->is_read;
+	}
+	if (source->cursor) {
+		out->cursor = copy(source->cursor);
+		if (!out->cursor) {
+			cb_notifications_page_free(out);
+			return CB_APP_ALLOC;
+		}
+	}
+	return CB_APP_OK;
+}
+
+cb_app_status cb_wolfram_convert_search(const wf_agent_actor_list *source,
+	                                cb_search_page *out) {
+	size_t i;
+	if (!source || !out || (source->actor_count && !source->actors))
+		return CB_APP_INVALID;
+	memset(out, 0, sizeof(*out));
+	out->count = source->actor_count < CB_SEARCH_CAPACITY
+	           ? source->actor_count : CB_SEARCH_CAPACITY;
+	if (out->count) {
+		out->results = calloc(out->count, sizeof(*out->results));
+		if (!out->results) return CB_APP_ALLOC;
+	}
+	for (i = 0; i < out->count; i++) {
+		const wf_agent_profile_view *src = &source->actors[i];
+		cb_search_result *result = &out->results[i];
+		if (!set_string(&result->did, src->did, 1) ||
+		    !set_string(&result->handle, src->handle, 1) ||
+		    !set_string(&result->display_name, src->display_name, 0) ||
+		    !set_string(&result->avatar_url, src->avatar, 0)) {
+			cb_search_page_free(out);
+			return CB_APP_ALLOC;
+		}
+	}
+	if (source->cursor) {
+		out->cursor = copy(source->cursor);
+		if (!out->cursor) {
+			cb_search_page_free(out);
+			return CB_APP_ALLOC;
+		}
+	}
+	return CB_APP_OK;
+}
+
+cb_app_status cb_wolfram_convert_profile(const wf_agent_profile *source,
+	                                 cb_profile_data *out) {
+	memset(out, 0, sizeof(*out));
+	if (!source || !source->did || !source->handle) return CB_APP_INVALID;
+	if (!set_string(&out->did, source->did, 1) ||
+	    !set_string(&out->handle, source->handle, 1) ||
+	    !set_string(&out->display_name, source->display_name, 0) ||
+	    !set_string(&out->description, source->description, 0) ||
+	    !set_string(&out->avatar_url, source->avatar_cid, 0)) {
+		cb_profile_data_free(out);
+		return CB_APP_ALLOC;
+	}
+	out->followers_count = source->followers_count;
+	out->follows_count = source->follows_count;
+	out->posts_count = source->posts_count;
+	return CB_APP_OK;
+}
+
+typedef struct {
+	wf_bsky_agent *agent;
+	int limit;
+	const char *cursor;
+	wf_agent_notification_list *list;
+} notifications_ctx;
+
+static cb_retry_status fetch_notifications_op(void *ctx) {
+	notifications_ctx *c = ctx;
+	return (cb_retry_status)wf_bsky_agent_get_notifications(c->agent, c->limit,
+	                                                       c->cursor, c->list);
+}
+
+static cb_app_status backend_notifications_fetch(void *opaque,
+	                                         const char *cursor, size_t limit,
+	                                         cb_notifications_page *out) {
+	cb_wolfram_context *context = opaque;
+	wf_agent_notification_list list = {0};
+	notifications_ctx nc = {&context->agent, (int)limit, cursor, &list};
+	wf_status status;
+	cb_app_status converted;
+	if (!context || !context->agent.agent) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
+	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
+	                             fetch_notifications_op, &nc, cb_network_backoff_ms,
+	                             cb_network_sleep_ms);
+	if (status != WF_OK) return status_from_wolfram(status);
+	converted = cb_wolfram_convert_notifications(&list, out);
+	wf_agent_notification_list_free(&list);
+	return converted;
+}
+
+typedef struct {
+	wf_bsky_agent *agent;
+	const char *query;
+	int limit;
+	const char *cursor;
+	wf_agent_actor_list *list;
+} search_ctx;
+
+static cb_retry_status search_actors_op(void *ctx) {
+	search_ctx *c = ctx;
+	return (cb_retry_status)wf_bsky_agent_search_actors(c->agent, c->query,
+	                                                   c->limit, c->cursor,
+	                                                   c->list);
+}
+
+static cb_app_status backend_search_fetch(void *opaque, const char *query,
+	                                  size_t limit, cb_search_page *out) {
+	cb_wolfram_context *context = opaque;
+	wf_agent_actor_list list = {0};
+	search_ctx sc = {&context->agent, query, (int)limit, NULL, &list};
+	wf_status status;
+	cb_app_status converted;
+	if (!context || !context->agent.agent) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
+	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
+	                             search_actors_op, &sc, cb_network_backoff_ms,
+	                             cb_network_sleep_ms);
+	if (status != WF_OK) return status_from_wolfram(status);
+	converted = cb_wolfram_convert_search(&list, out);
+	wf_agent_actor_list_free(&list);
+	return converted;
+}
+
+typedef struct {
+	wf_bsky_agent *agent;
+	const char *actor;
+	wf_agent_profile *profile;
+} profile_ctx;
+
+static cb_retry_status fetch_profile_op(void *ctx) {
+	profile_ctx *c = ctx;
+	return (cb_retry_status)wf_bsky_agent_get_profile(c->agent, c->actor,
+	                                                 c->profile);
+}
+
+static cb_app_status backend_profile_fetch(void *opaque, const char *actor,
+	                               cb_profile_data *out) {
+	cb_wolfram_context *context = opaque;
+	wf_agent_profile profile = {0};
+	profile_ctx pc = {&context->agent, actor, &profile};
+	wf_status status;
+	cb_app_status converted;
+	if (!context || !context->agent.agent) return CB_APP_INVALID;
+	if (!context->network_ready) return CB_APP_NETWORK;
+	status = (wf_status)cb_retry(CB_NETWORK_MAX_ATTEMPTS, cb_wolfram_transient,
+	                             fetch_profile_op, &pc, cb_network_backoff_ms,
+	                             cb_network_sleep_ms);
+	if (status != WF_OK) return status_from_wolfram(status);
+	converted = cb_wolfram_convert_profile(&profile, out);
+	wf_agent_profile_free(&profile);
+	return converted;
+}
+
+cb_notifications_backend cb_wolfram_notifications_backend(void) {
+	cb_notifications_backend backend = {backend_notifications_fetch};
+	return backend;
+}
+
+cb_search_backend cb_wolfram_search_backend(void) {
+	cb_search_backend backend = {backend_search_fetch};
+	return backend;
+}
+
+cb_profile_backend cb_wolfram_profile_backend(void) {
+	cb_profile_backend backend = {backend_profile_fetch};
+	return backend;
 }
