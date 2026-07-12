@@ -387,7 +387,7 @@ static void render_profile(void) {
 
 static void render_session_menu(void) {
 	static const char *labels[CB_SESSION_MENU_COUNT] = {
-		"Resume Channel Blue", "Sign out and clear session", "Exit to Homebrew Channel"
+		"Resume Channel Blue", "Sign out and clear session", "Exit to Wii Menu"
 	};
 	size_t i;
 	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 12, 16, 255});
