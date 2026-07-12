@@ -107,6 +107,33 @@ void nav_pointer_update(f32 x, f32 y, int valid, int clicked) {
 		int field = (int)((pointer_y - (CONTENT_Y_TOP + 24.0f)) / 76.0f);
 		if (field >= 0 && field < 3) login_form->active_field = (cb_login_field)field;
 	}
+	if (nav_get_current_screen() == SCREEN_FEED && feed &&
+	    pointer_y >= CONTENT_Y_TOP && pointer_y < CONTENT_Y_BOTTOM) {
+		size_t picked = (size_t)((pointer_y - CONTENT_Y_TOP) / 76.0f);
+		if (picked < feed->count) {
+			feed->selected = picked;
+			nav_handle_input(WPAD_BUTTON_A);
+		}
+		return;
+	}
+	if (nav_get_current_screen() == SCREEN_SEARCH && search &&
+	    pointer_y >= CONTENT_Y_TOP + 56.0f && pointer_y < CONTENT_Y_BOTTOM) {
+		size_t picked = (size_t)((pointer_y - (CONTENT_Y_TOP + 56.0f)) / 76.0f);
+		if (picked < search->count) {
+			search->selected = picked;
+			nav_handle_input(WPAD_BUTTON_A);
+		}
+		return;
+	}
+	if (nav_get_current_screen() == SCREEN_NOTIFICATIONS && notifications &&
+	    pointer_y >= CONTENT_Y_TOP + 48.0f && pointer_y < CONTENT_Y_BOTTOM) {
+		size_t picked = (size_t)((pointer_y - (CONTENT_Y_TOP + 48.0f)) / 76.0f);
+		if (picked < notifications->count) {
+			notifications->selected = picked;
+			nav_handle_input(WPAD_BUTTON_A);
+		}
+		return;
+	}
 	for (row = 0; row < 4; row++) {
 		int len = (int)strlen(keyboard_rows[row]);
 		f32 key_w = 54.0f;
