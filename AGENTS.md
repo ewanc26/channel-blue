@@ -1,123 +1,60 @@
-# AGENTS.md
+# Repository guidance
 
-Agentic principles and technical context for the `channel-blue` repository.
+## Purpose and status
 
-## License
+Channel Blue is an AGPL-3.0-or-later Bluesky client for the Nintendo Wii. It is a real, linked MVP candidate rather than a desktop mock: libogc owns video, GX, input, networking, and SD access, while the sibling `../wolfram` C SDK owns AT Protocol/XRPC, authentication, and Wii HTTPS. The DOL boots in Dolphin, but the README correctly leaves real-hardware login, TLS, session refresh, and live social flows unverified. Do not turn build or emulator success into a hardware-compatibility claim.
 
-Channel Blue is licensed under the **GNU Affero General Public License v3.0 or later** (AGPL-3.0-or-later). See [LICENSE](LICENSE) for the full text. The `wolfram` SDK it links against is MIT-licensed; the AGPL's network interaction clause applies to Channel Blue's own source code.
+Read `README.md`, `Makefile`, and the relevant public header before changing a module. Protocol work must also be checked against `../wolfram`; wire-format questions should be checked against the local upstream checkout at `../../Local/atproto`, not guessed from generated names.
 
-## Project overview
+## Repository map
 
-Channel Blue is a Bluesky client for the Nintendo Wii. It runs as a homebrew application via the Homebrew Channel, rendering posts from the AT Protocol (XRPC) onto the Wii's 480p display. The `wolfram` C SDK (linked from `/Volumes/Storage/Developer/Git/wolfram`) provides the protocol layer; Channel Blue owns the UI, input handling, and Wii-specific hardware integration.
+- `source/main.c`: libogc/GX startup, SD mounting, controller construction, the network-initialization worker, entropy provisioning, and the single frame loop.
+- `source/navigation/`: four-tab screen stacks, rendering dispatch, and synchronous input-to-controller actions.
+- `source/app/`: bounded UI/domain controllers for auth, timelines, threads, compose, discovery, input, UTF-8, avatars/media, retry, and session/entropy files. These modules are intentionally host-testable where possible.
+- `source/integration/wolfram_backend.*`: the only application adapter to Wolfram. It converts owned SDK results into Channel Blue models and supplies controller callbacks.
+- `source/render/` and `source/components/`: GX state, embedded Inter/FreeType glyph rendering, JPEG/PNG decoding, the eight-slot decoded-texture LRU, and navigation chrome.
+- `tests/`: host-side controller, persistence, UTF-8, retry, input, and Wolfram-adapter tests. These do not exercise libogc, GX, IOS networking, or real SD behavior.
+- `data/`, `icon.png`, `meta.xml`: embedded/deployment assets. `dist/`, `build/`, `channel-blue.dol`, and generated `*_bin.*` files are build products.
 
-## Technical philosophy
+## Architecture and invariants
 
-1. **Wii-first, honest constraints**: the Wii has 24 MB MEM1 (1T-SRAM) and ~48 MB usable MEM2 (IOS reserves ~12–16 MB of the 64 MB GDDR3). Every allocation matters. Stream data rather than buffering entire timelines in RAM. Prefer fixed-size buffers and arena allocation over unbounded `malloc`/`free`.
-2. **Protocol parity with wolfram**: consume `libwolfram` APIs (`wf_xrpc_*`, `wf_agent_*`) for all AT Protocol / XRPC work. Never hand-roll XRPC request/response parsing, OAuth, or session management — that is `wolfram`'s job. When `wolfram` adds a new typed wrapper, adopt it.
-3. **No hand-rolled crypto or TLS**: TLS/HTTPS is required (Bluesky PDS endpoints are HTTPS-only). Cross-compile mbedTLS as a Wii portlib and wrap it behind a thin transport layer. Do not implement certificate validation or symmetric ciphers from scratch.
-4. **GX is the renderer, not OpenGL**: the Wii's ATI Hollywood GPU is programmed through libogc's GX subsystem. Text is rendered with FreeType into textures, then drawn as GX quads. There is no shader pipeline — all geometry goes through the fixed-function vertex/texgen pipeline. Learn the GX setup sequence (FIFO allocation, viewport, projection, vertex descriptor) before writing rendering code.
-5. **Threaded architecture**: Wii homebrew supports cooperative threads via `lwp` (libogc). Use a dedicated render thread for GX draw operations and a main/UI thread for input handling and XRPC calls. Communicate between threads via message queues (`LWP_MessageQueue`), not shared mutable state.
-6. **Stubs are honest**: unimplemented functions return an error code and carry a `TODO` explaining what is missing — never a silent no-op or fabricated success.
-7. **Ownership is explicit**: every heap-allocated output has a matching `_free` function documented next to it. No hidden allocations, no implicit ownership transfer.
+- Rendering, input polling, navigation, and XRPC-backed actions all run on the main loop. The sole LWP worker performs startup networking/entropy initialization; there is no render thread or message-queue architecture. Network calls made from navigation are blocking, so do not introduce races by assuming otherwise.
+- Keep the layer boundary `libogc/Wii platform -> Wolfram transport and agent -> integration adapter -> app controllers -> navigation/rendering`. Do not hand-roll XRPC, auth, signing, TLS, or lexicon parsing in this repository.
+- Wolfram result objects and Channel Blue models have different ownership. Conversion code must duplicate required strings, free partial results on every failure path, and use the matching `wf_*_free` or `cb_*_free` routine. Preserve bounded capacities and response limits; the Wii has no virtual memory.
+- Social actions depend on exact identifiers: replies snapshot the selected post's URI/CID and root URI when compose opens; follow takes the author's DID; notification post navigation uses `reasonSubject`; like/repost deletion uses the viewer record URI. Do not substitute display handles or the currently selected row later.
+- The input and renderer are UTF-8-aware. `cb_utf8_*` edits by scalar boundary, and `font.c` decodes code points into a bounded 192-entry FreeType glyph cache with replacement-glyph fallback. Preserve byte and code-point limits together.
+- GX state is global. Text and image paths switch vertex/texture state and restore the solid-quad format afterward. Texture buffers are 32-byte aligned and cache-flushed. Preserve GX tile layout, aligned dimensions, and explicit ownership when touching render code.
+- Images are decoded from untrusted network bytes. The backend accepts HTTPS URLs only and caps compressed responses at 4 MiB; PNG source dimensions/pixels and decoded output sizes are bounded; decoded thumbnails share an eight-slot LRU intended to stay below roughly 512 KiB. Maintain all checks before allocation or expansion. URL hashing is a cache key, not a trust boundary.
 
-## Code style
+## Credentials, entropy, and persistence
 
-- **C99 with libogc conventions**: the devkitPPC toolchain is GCC-based (powerpc-eabi). Use C99 features (variable-length arrays, designated initializers, `stdint.h` types) but avoid C11 `_Generic` or `_Atomic` — the PPC toolchain does not support them reliably. Match libogc's naming: `u8`, `u16`, `u32`, `s8`, `s16`, `s32`, `f32`, `BOOL`.
-- **Comments are allowed and encouraged** where they aid understanding — especially next to public API declarations (ownership rules, lifetime), non-obvious GX/VIDEO/WiFi details, and `TODO` notes. The existing `wolfram` codebase uses comments pervasively; match that. Do not add noise comments that merely restate the code.
-- **Atomic conventional commits**: every commit must contain exactly one logical change. Scope by module — `feat(ui)`, `feat(timeline)`, `feat(gx)`, `fix(network)`, `fix(input)`, `docs(roadmap)`, etc. Never mix unrelated changes in a single commit (e.g. do not combine a code change with a docs update). Feature work lands on a dedicated `feat/<area>` branch and is merged to `main` with `--no-ff` so the branch history is preserved. If a commit touches multiple concerns, split it into multiple sequential commits.
-- **No AI co-authors**: commits must not add a `Co-authored-by:` trailer crediting an AI agent. AI assistance is welcome, but credit for committed work goes to human authors only.
-- **Module layering**: transport (lwip + mbedTLS) → XRPC (`wolfram`) → session/agent (`wolfram`) → UI (GX rendering + input). New features follow the existing pattern: call `wolfram` agent APIs for data, then pass results to the GX rendering layer.
-- **No commented-out code** left in place; delete dead code or move it to a test.
-- Follow the surrounding file's indentation and brace style (tabs for indentation, K&R braces).
+- Login passwords remain only in the in-memory form and are cleared after successful login. The saved session is different: `sd:/apps/channel-blue/session.dat` contains service, access JWT, refresh JWT, handle, and DID in plaintext. It uses a bounded newline format and temp-file rename, but no encryption, permission hardening, or durability `fsync`. Treat the SD card as sensitive and never log or commit these values.
+- `sd:/apps/channel-blue/entropy.bin` is a unique 64-byte seed, not a distributable default. Startup loads it into Wolfram, rotates it before TLS use, saves the replacement, and only then commits Wolfram's pending seed. Do not weaken the load/rotate/save/commit ordering or silently fall back to a shared seed.
+- `make bundle` creates a fresh entropy file under `dist/`; the whole bundle must remain unique per installation. Never commit `dist/`, `entropy.bin`, tokens, passwords, private keys, or captured authenticated traffic.
+- Logout deletes the persisted session and clears account-scoped controllers and decoded textures. Any new cache holding account data must join that cleanup path.
 
-## Wii homebrew specifics
+## Build and verification
 
-### Toolchain and build system
+The build expects devkitPro/devkitPPC plus Wii portlibs and a sibling Wolfram checkout. Wolfram's Wii script builds its repo-local mbedTLS/CA-backed transport; do not describe mbedTLS as an ordinary preinstalled portlib. `WII_PORTLIBS` can override the default portlibs prefix.
 
-- **Toolchain**: devkitPPC (`powerpc-eabi-gcc`), installed via devkitPro pacman.
-- **SDK**: libogc — provides GX (graphics), VIDEO (display), `lwp` (threads), `wiiuse`/`WPAD_` (Wiimote), `lwip` (TCP/IP), `fat` (SD card FAT filesystem), `con` (console text via GX).
-- **Build**: standard devkitPro Makefile. Output is a `.dol` (executable). `meta.xml` and `icon.png` live at the repo root and are deployed to `sd:/apps/channel-blue/` alongside the `.dol`.
-- **Portlibs**: additional libraries cross-compiled for PPC via `dkp-pacman`. Needed portlibs include: `mbedtls` (TLS), `libpng` (PNG decoding for avatars/embeds), `freetype` (font rendering), `zlib` (decompression, likely a transitive dependency).
-- **Deploy**: `wiiload channel-blue.dol` uploads to a running Wii over WiFi, or copy the `.dol` to the SD card manually.
+- `make test`: build and run host tests for pure app modules and the Wolfram adapter, including a host Wolfram build.
+- `make`: cross-build and link `channel-blue.dol`.
+- `make verify`: run host tests, a parallel cross-build, and a tracked-diff check. This is the normal pre-commit validation.
+- `make bundle`: create the Homebrew layout and a new per-installation entropy seed under `dist/`.
+- `make dolphin`: launch the locally configured Dolphin setup. It is interactive and may write emulator state.
+- `make release`: copy a bundle outside the repository to `/Volumes/Storage/Wii software`; this is a deployment side effect, not a validation command. Do not run it without explicit intent.
+- `make clean`: remove local build products.
 
-### Memory model
+Run the narrow host test while iterating, then `make verify` when the installed toolchains permit it. Hardware-sensitive changes additionally need a Wii check: TLS/CA validation, entropy persistence across boots, SD rename behavior, Wi-Fi timeouts, keyboard/controller input, and GX rendering cannot be certified by host tests. Dolphin is useful for UI and boot smoke tests but is not evidence of real IOS network behavior.
 
-- **MEM1** (24 MB, fast 1T-SRAM): prefer for hot data — GX command FIFO, framebuffers, texture data, frequently accessed post text.
-- **MEM2** (48 MB usable, GDDR3): suitable for larger allocations — JSON parse buffers, FreeType glyph caches, TLS session state, network receive buffers.
-- **No virtual memory**: the Wii has no MMU for user code. `malloc`/`free` manage a fixed heap. OOM is a real and unrecoverable crash. Always check return values and fail gracefully.
-- **GX Embedded Framebuffer** (3 MB): allocated from MEM1 by `VIDEO_GetCurrentMode()->fbWidth * VIDEO_GetCurrentMode()->efbHeight * GX_FIFOIZ`. Do not overlap with application memory.
+## Change discipline
 
-### Networking
+- Match surrounding C style; the tree mixes tabs in app code with spaces in render code, so do not mechanically reformat unrelated lines. Keep public ownership/lifetime comments accurate.
+- Add or update a host test for controller logic, bounds, parsing, UTF-8, persistence, retries, and adapter conversion. Keep libogc-dependent code out of host units unless an explicit seam is added.
+- Preserve bounded retry behavior and distinguish transient network failures from auth, protocol, allocation, and invalid-input failures. Never fabricate success for an incomplete path.
+- Prefer typed `wf_bsky_agent_*` APIs. If the required SDK surface is missing, implement and test it in Wolfram first rather than bypassing the boundary here.
+- Keep commits atomic and conventional, and do not add AI co-author trailers. Do not stage generated bundles, DOLs, secrets, emulator state, or unrelated worktree changes.
 
-- **lwIP** (bundled with libogc): provides BSD-style sockets (`socket`, `connect`, `send`, `recv`, `close`). Initialize via `net_init()` (calls `net_init()` from libogc's network subsystem) after calling `net_init()` once at startup. WiFi is 802.11b/g — expect ~2–4 Mbps throughput in practice.
-- **TLS**: all Bluesky XRPC endpoints use HTTPS. Link `libmbedtls` and initialize an mbedTLS SSL context per XRPC call. Validate the PDS certificate chain against a bundled root CA certificate (bundled as a binary asset in the DOL or loaded from SD).
-- **DNS**: lwIP provides `gethostbyname()`. Use it to resolve `bsky.social` (or whichever PDS the user configures).
-- **Timeouts**: WiFi on the Wii is unreliable. Set aggressive socket timeouts (5–10 seconds) and implement retry with exponential backoff. The user may be on a weak signal or far from the access point.
-- **IOS network calls**: the actual WiFi hardware is managed by IOS (the ARM co-processor). lwIP communicates with IOS via IPC. This means networking calls block the PPC thread — use a dedicated network thread or non-blocking I/O pattern.
+## Current high-risk gaps
 
-### Graphics (GX)
-
-- **Display mode**: 640×480 (NTSC/PAL 480i/480p). Target 480p progressive scan when available (`CONF_GetProgressive()`).
-- **GX setup sequence**: `VIDEO_Init()` → `VIDEO_GetPreferredMode()` → allocate XFB → `GX_Init()` → `GX_SetViewport()` → configure vertex descriptor → set projection matrix. This must happen before any draw calls.
-- **Text rendering**: use FreeType to rasterize TTF glyphs into 8-bit alpha textures, then upload to GX via `GX_InitTexObj()` and draw as textured quads with alpha blending. Pre-render a bitmap font atlas at startup to avoid per-frame FreeType calls.
-- **Texture memory**: GX texture memory (TMEM) is only 4 KB on the hardware. Large textures must be tiled and loaded via `GX_LoadTexObj()`. Keep avatar thumbnails small (e.g., 32×32 or 48×48 pixels, YUV422 or IA8 format).
-- **Double buffering**: use `VIDEO_SetNextFramebuffer()` / `VIDEO_Flush()` with two framebuffers for tear-free presentation.
-- **Performance**: the GX command FIFO fills at ~128 KB/s. Avoid submitting more geometry than necessary each frame. For a text-heavy UI, pre-render text into display lists (`GX_BeginDispList` / `GX_EndDispList`) and replay them.
-
-### Input
-
-- **Wiimote** (`WPAD_`): primary input device. Buttons: D-pad (navigation), A (select/post), B (back/cancel), Plus/Minus (scroll), Home (menu). WPAD handles IR pointer and Nunchuk/Classic Controller expansion detection.
-- **USB keyboard** (`kbd_*` from `libwiikeyboard`): optional — for typing post text. Highly recommended for a social media client where the user composes messages.
-- **Classic Controller** (`WPAD_EXP_CLASSIC`): if detected, map face buttons and analog stick for scrolling/navigation.
-- **Input polling**: call `WPAD_ScanPads()` and `PAD_ScanPads()` once per frame (in the main loop, not in the render thread). Read button states with `WPAD_ButtonsDown()`.
-
-### File I/O
-
-- **SD card**: mounted via `fatMountSimple("sd:", &__io_wiisd)` at startup. All persistent data (settings, cached credentials, avatar cache) lives on the SD card under `sd:/apps/channel-blue/`.
-- **NAND**: not used for user data. Avoid writing to NAND — it has limited write cycles and requires IOS permissions.
-
-## Code style — GX specifics
-
-- GX calls are verbose and stateful. Group related GX state changes together and comment which "pass" or "stage" they belong to (e.g., `// Stage 1: Configure texture environment for text quads`).
-- The GX state machine is global. Reset relevant state at the start of each frame or when switching between rendering modes (e.g., text vs. images).
-- Use `GX_Begin` / `GX_End` pairs for immediate-mode drawing. Always specify the correct vertex count in `GX_Begin` to avoid FIFO corruption.
-
-## Development workflow
-
-- **Build**: `make` (uses the devkitPro Makefile; requires `DEVKITPPC` env var and devkitPro pacman packages installed).
-- **Deploy**: `wiiload channel-blue.dol` (WiFi upload to Wii) or copy `channel-blue.dol` to `sd:/apps/channel-blue/`.
-- **Test on hardware**: launch from the Homebrew Channel. There is no Wii emulator that accurately replicates GX rendering or WiFi behavior — real hardware testing is mandatory.
-- **Dolphin emulator**: useful for testing GX rendering and basic input (Wiimote pointer). Does not replicate WiFi timing, IOS behavior, or SD card I/O accurately. Use for UI/layout iteration only.
-- **Wolfram integration**: build `libwolfram` as a static library (`.a`) and link it into the Channel Blue DOL. Ensure `wolfram`'s `CMakeLists.txt` is built with the same devkitPPC cross-compiler. The `wolfram` repo at `/Volumes/Storage/Developer/Git/wolfram` is the source of truth for AT Protocol behavior.
-- **Lexicon coverage**: cross-reference `bluesky-social/atproto` lexicons for wire formats. The `wolfram` SDK generates typed wrappers from lexicons — before writing raw XRPC calls, check if `wolfram` already provides a typed wrapper.
-
-## Current state
-
-The project is an MVP candidate. It has a cross-compiling GX UI, FreeType text
-and image pipeline, bounded timeline/composition/auth controllers, atomic SD
-session persistence, USB keyboard input, and a concrete adapter to the
-cross-compiled wolfram SDK. Wolfram now provides an mbedTLS-backed Wii HTTPS
-transport with CA validation and externally provisioned rotating entropy. The
-complete `.dol` links and the UI boots in Dolphin. The immediate next steps are:
-
-1. Verify login/session refresh, TLS validation, and timeline calls on real Wii
-   hardware.
-3. Exercise post, reply, like, repost, follow, search, notifications, profile,
-   threads, and avatar fetching against a live PDS.
-
-## Next planned work
-
-- [x] Bootstrap: Makefile, DOL, SD card deployment metadata
-- [x] Cross-compile and link libwolfram for PPC
-- [x] WiFi init via wolfram platform backend
-- [x] Secure HTTPS transport with CA validation and rotating entropy
-- [ ] Verify HTTPS GET to bsky.social on hardware
-- [x] GX rendering pipeline: framebuffer, 2D drawing, texture upload
-- [x] FreeType text rendering
-- [x] Session management UI and atomic credential persistence
-- [x] Bounded timeline view with cursor pagination
-- [x] Post/reply composition with draft retention on failure
-- [x] Wolfram-backed social actions (like, repost, follow)
-- [x] Avatar network fetch and thumbnail rendering
-- [x] Search, notifications, and profile tabs
-- [x] Error handling and retry logic for flaky WiFi (bounded exponential backoff on transient errors)
+The live Wii path remains the authority. Before calling the MVP complete, verify initial entropy provisioning, HTTPS certificate validation, login and refresh persistence, timeline pagination, post/reply, like/repost deletion, DID-based follow/unfollow, search, notifications and seen-state, profiles, thread traversal, avatars/media, logout cleanup, and non-ASCII input/rendering against a real PDS on hardware. Blocking network and eager avatar/media prefetch currently occur in input/navigation paths, so performance work should start there without inventing concurrency that the ownership model cannot support.
