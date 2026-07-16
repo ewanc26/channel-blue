@@ -7,6 +7,8 @@ your couch, using the Wiimote and a USB keyboard. Built on the
 [AT Protocol](https://atproto.com) via the
 [wolfram](https://github.com/ewan-croft/wolfram) C SDK.
 
+> Independent project; see the [trademark notice](TRADEMARKS.md).
+
 **Status:** Wii-installable MVP. The Wii UI, USB-keyboard sign-in and
 composition flows, timeline and thread views, discovery tabs, avatar pipeline,
 SD session persistence, Wolfram adapter, and mbedTLS-backed Wii HTTPS transport
