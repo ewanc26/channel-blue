@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 int cb_entropy_seed_load(const char *path,
 	unsigned char seed[CB_ENTROPY_SEED_SIZE]) {
@@ -48,7 +49,22 @@ int cb_entropy_seed_save(const char *path,
 	}
 	failed = fwrite(seed, 1, CB_ENTROPY_SEED_SIZE, file) !=
 		CB_ENTROPY_SEED_SIZE;
-	if (fflush(file) != 0 || fclose(file) != 0) failed = 1;
+	if (fflush(file) != 0) failed = 1;
+	/*
+	 * Push the bytes to the card before the rename makes them visible.
+	 * fflush only clears stdio's buffer; without this barrier a power loss
+	 * can land the rename while the data is still in the FAT cache, leaving
+	 * a zero-length or stale seed. The next boot would then come up on the
+	 * previous seed and regenerate identical key material — exactly what the
+	 * rotate/save/commit cycle exists to prevent.
+	 *
+	 * libfat routes fsync through _FAT_fsync_r, so this is real on hardware.
+	 * A failure is not treated as fatal: the data is already flushed, and a
+	 * platform that cannot provide the barrier should not lose the seed
+	 * entirely by refusing to save it.
+	 */
+	if (!failed) (void)fsync(fileno(file));
+	if (fclose(file) != 0) failed = 1;
 	if (!failed && rename(temporary, path) != 0) failed = 1;
 	if (failed) remove(temporary);
 	free(temporary);
