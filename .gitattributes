@@ -30,3 +30,16 @@ Makefile text eol=lf
 *.otf binary
 *.woff binary
 *.woff2 binary
+
+
+# Agent / tooling configuration
+**/.agents/** linguist-vendored
+.claude/** linguist-vendored
+.opencode/** linguist-vendored
+.letta/** linguist-vendored
+
+# Fonts
+*.woff linguist-generated
+*.woff2 linguist-generated
+*.ttf linguist-generated
+*.otf linguist-generated
