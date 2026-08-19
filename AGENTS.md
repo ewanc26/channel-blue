@@ -98,14 +98,15 @@ and image pipeline, bounded timeline/composition/auth controllers, atomic SD
 session persistence, USB keyboard input, and a concrete adapter to the
 cross-compiled wolfram SDK. Wolfram now provides an mbedTLS-backed Wii HTTPS
 transport with CA validation and externally provisioned rotating entropy. The
-complete `.dol` links and the UI boots in Dolphin. The immediate next steps are:
+complete `.dol` links and the UI boots in Dolphin. Avatar bytes are now fetched
+through wolfram, decoded, and populate the fixed texture cache (`source/app/avatar.{c,h}`,
+wired into the timeline in `source/navigation/nav.c`). The immediate next steps
+are:
 
 1. Verify login/session refresh, TLS validation, and timeline calls on real Wii
    hardware.
-3. Fetch avatar bytes through wolfram and populate the existing fixed texture
-   cache.
-4. Replace the remaining search/notification/profile placeholders.
-5. Exercise post, reply, like, repost, and follow against a live PDS.
+2. Replace the remaining search/notification/profile placeholders.
+3. Exercise post, reply, like, repost, and follow against a live PDS.
 
 ## Next planned work
 
@@ -120,6 +121,6 @@ complete `.dol` links and the UI boots in Dolphin. The immediate next steps are:
 - [x] Bounded timeline view with cursor pagination
 - [x] Post/reply composition with draft retention on failure
 - [x] Wolfram-backed social actions (like, repost, follow)
-- [ ] Avatar network fetch and thumbnail rendering
+- [x] Avatar network fetch and thumbnail rendering
 - [ ] Search, notifications, and profile tabs
 - [x] Error handling and retry logic for flaky WiFi (bounded exponential backoff on transient errors)
