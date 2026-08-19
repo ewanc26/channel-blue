@@ -297,11 +297,24 @@ static void render_search(void) {
 	}
 }
 
+/* Loads the signed-in user's own profile, then best-effort warms the avatar
+ * cache for it — mirrors how the timeline prefetches avatars per-page rather
+ * than blocking the profile load on the avatar fetch. */
+static void load_own_profile(void) {
+	if (cb_profile_load(profile, profile_backend, discovery_context,
+	                    authentication->session.handle) == CB_APP_OK &&
+	    profile->profile.avatar_url)
+		cb_avatar_ensure((cb_wolfram_context *)discovery_context,
+		                profile->profile.avatar_url);
+}
+
 static void render_profile(void) {
 	GXColor label = {150, 150, 155, 255};
 	GXColor value = {225, 225, 228, 255};
 	GXColor accent = {29, 155, 240, 255};
+	GXColor white = {255, 255, 255, 255};
 	char counts[96];
+	f32 text_x = 28;
 
 	if (!profile || !profile->loaded) {
 		if (profile && profile->last_status == CB_APP_NETWORK)
@@ -313,18 +326,23 @@ static void render_profile(void) {
 		return;
 	}
 	draw_quad(0, CONTENT_Y_TOP, 640, CONTENT_HEIGHT, (GXColor){10, 12, 16, 255});
-	draw_clipped_text(28, CONTENT_Y_TOP + 20,
+	if (profile->profile.avatar_url &&
+	    cb_avatar_draw(profile->profile.avatar_url, 28, CONTENT_Y_TOP + 20, 64,
+	                  white) == 0)
+		text_x = 108;
+	draw_clipped_text(text_x, CONTENT_Y_TOP + 20,
 	                  profile->profile.display_name ? profile->profile.display_name
 	                                               : profile->profile.handle,
 	                  70, accent);
-	draw_clipped_text(28, CONTENT_Y_TOP + 52, profile->profile.handle, 70, label);
+	draw_clipped_text(text_x, CONTENT_Y_TOP + 52, profile->profile.handle, 70,
+	                  label);
 	if (profile->profile.description)
-		draw_clipped_text(28, CONTENT_Y_TOP + 86, profile->profile.description,
+		draw_clipped_text(28, CONTENT_Y_TOP + 100, profile->profile.description,
 		                  84, value);
 	snprintf(counts, sizeof(counts), "Followers %d   Following %d   Posts %d",
 	         profile->profile.followers_count, profile->profile.follows_count,
 	         profile->profile.posts_count);
-	draw_clipped_text(28, CONTENT_Y_TOP + 140, counts, 78, value);
+	draw_clipped_text(28, CONTENT_Y_TOP + 154, counts, 78, value);
 }
 
 static void render_placeholder(screen_id_t screen) {
@@ -435,8 +453,7 @@ void nav_handle_input(u32 pressed) {
 			else if (switched == 3 && profile && profile_backend &&
 			         !profile->loaded && authentication &&
 			         authentication->session.handle[0])
-				cb_profile_load(profile, profile_backend, discovery_context,
-				                authentication->session.handle);
+				load_own_profile();
 			return;
 		}
 	}
@@ -509,8 +526,7 @@ void nav_handle_input(u32 pressed) {
 	} else if (screen == SCREEN_PROFILE) {
 		if (pressed & WPAD_BUTTON_PLUS && profile_backend && authentication &&
 		    authentication->session.handle[0])
-			cb_profile_load(profile, profile_backend, discovery_context,
-			                authentication->session.handle);
+			load_own_profile();
 		if (pressed & WPAD_BUTTON_B) nav_pop();
 	} else {
 		if (pressed & WPAD_BUTTON_B) nav_pop();
