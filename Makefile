@@ -23,7 +23,7 @@ PROJECT_ROOT	:=	$(patsubst %/,%,$(dir $(abspath $(firstword $(MAKEFILE_LIST)))))
 WOLFRAM_DIR	?=	$(abspath $(PROJECT_ROOT)/../wolfram)
 WOLFRAM_BUILD	?=	$(WOLFRAM_DIR)/build-wii
 WOLFRAM_PORTLIBS ?= $(WOLFRAM_DIR)/build-wii-mbedtls
-HOST_WOLFRAM_BUILD ?= $(WOLFRAM_DIR)/build
+HOST_WOLFRAM_BUILD ?= $(WOLFRAM_DIR)/build-host
 INCLUDES	:=
 
 #---------------------------------------------------------------------------------
