@@ -20,10 +20,19 @@ BUILD		:=	build
 SOURCES		:=	source source/app source/integration source/navigation source/components source/render
 DATA		:=	data
 PROJECT_ROOT	:=	$(patsubst %/,%,$(dir $(abspath $(firstword $(MAKEFILE_LIST)))))
-WOLFRAM_DIR	?=	$(abspath $(PROJECT_ROOT)/../wolfram)
+# wolfram SDK pin. The Wii build links a prebuilt wolfram cross-compiled for
+# PPC, so -- unlike the CMake consumers -- there is no FetchContent to fetch
+# it: the checkout itself is a build input and must be reproduced for a
+# build. WOLFRAM_VERSION names the released tag the checkout is pinned to;
+# `make wolfram-checkout` provisions it at $(WOLFRAM_DIR) (default
+# $(PROJECT_ROOT)/.devdeps/wolfram). Setting WOLFRAM_DIR explicitly (e.g.
+# WOLFRAM_DIR=../wolfram) opts into a live sibling checkout for development;
+# pinning is the expected default and the sibling is the override.
+WOLFRAM_VERSION	?=	v0.22.0
+WOLFRAM_DIR	?=	$(abspath $(PROJECT_ROOT)/.devdeps/wolfram)
 WOLFRAM_BUILD	?=	$(WOLFRAM_DIR)/build-wii
-WOLFRAM_PORTLIBS ?= $(WOLFRAM_DIR)/build-wii-mbedtls
-HOST_WOLFRAM_BUILD ?= $(WOLFRAM_DIR)/build-host
+WOLFRAM_PORTLIBS ?=	$(WOLFRAM_DIR)/build-wii-mbedtls
+HOST_WOLFRAM_BUILD ?=	$(WOLFRAM_DIR)/build-host
 INCLUDES	:=
 
 #---------------------------------------------------------------------------------
@@ -124,7 +133,29 @@ DISTDIR		:=	/Volumes/Storage/Wii software
 
 BUNDLEDIR	:=	dist/apps/channel-blue
 
-.PHONY: $(BUILD) clean bundle dolphin release test
+.PHONY: $(BUILD) clean bundle dolphin release test wolfram-checkout
+
+#---------------------------------------------------------------------------------
+# wolfram-checkout: provision the wolfram SDK checkout at the pinned release
+# tag. Cross-compiling libwolfram for the Wii is the user's step (see
+# README's "Building"); this just guarantees the right source, so a build
+# never picks up an unpinned checkout by accident. WOLFRAM_DIR overrides the
+# location (a live ../wolfram sibling is the standard dev-mode choice).
+#---------------------------------------------------------------------------------
+wolfram-checkout:
+	@if [ ! -d "$(WOLFRAM_DIR)/.git" ]; then \
+		echo "wolfram-checkout: cloning wolfram at $(WOLFRAM_VERSION) into $(WOLFRAM_DIR)"; \
+		mkdir -p "$(dir $(WOLFRAM_DIR))"; \
+		git clone --depth 1 --branch "$(WOLFRAM_VERSION)" \
+			https://github.com/ewanc26/wolfram.git "$(WOLFRAM_DIR)"; \
+	else \
+		want="$$(git -C "$(WOLFRAM_DIR)" rev-parse "$(WOLFRAM_VERSION)^{}" 2>/dev/null)"; \
+		have="$$(git -C "$(WOLFRAM_DIR)" rev-parse HEAD 2>/dev/null)"; \
+		if [ -n "$$want" ] && [ "$$want" != "$$have" ]; then \
+			echo "wolfram-checkout: $(WOLFRAM_DIR) is at $$have, not $(WOLFRAM_VERSION) ($$want)"; \
+			echo "  checkout the pinned tag before building, or set WOLFRAM_DIR to a live dev checkout"; \
+		fi; \
+	fi
 
 #---------------------------------------------------------------------------------
 $(BUILD):
