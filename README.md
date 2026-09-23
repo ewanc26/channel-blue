@@ -5,7 +5,7 @@ A Bluesky client for the Nintendo Wii.
 Browse your timeline, read posts, and compose replies — all from the comfort of
 your couch, using the Wiimote and a USB keyboard. Built on the
 [AT Protocol](https://atproto.com) via the
-[wolfram](https://github.com/ewan-croft/wolfram) C SDK.
+[wolfram](https://github.com/ewanc26/wolfram) C SDK.
 
 **Status:** MVP candidate. The Wii UI, USB-keyboard sign-in and composition
 flows, bounded timeline controller, SD session persistence, Wolfram adapter,
@@ -38,7 +38,7 @@ verification on Wii hardware.
   - `freetype` (font rendering)
   - `libpng` (image decoding)
   - `zlib` (compression)
-- [wolfram](https://github.com/ewan-croft/wolfram) C SDK (cross-compiled for
+- [wolfram](https://github.com/ewanc26/wolfram) C SDK (cross-compiled for
   PPC)
 
 ## Building
@@ -48,12 +48,21 @@ verification on Wii hardware.
 # Then install the Wii SDK and available portlibs:
 sudo dkp-pacman -S wii-dev ppc-freetype ppc-libpng ppc-zlib
 
-# Build libwolfram and its declared cJSON/libcbor dependencies for PPC:
-../wolfram/tools/build_wii_mbedtls.sh
-cmake -S ../wolfram -B ../wolfram/build-wii \
-  -DCMAKE_TOOLCHAIN_FILE=../wolfram/.devdeps/wii.cmake \
+# Provision the wolfram SDK checkout at the pinned release tag (v0.22.0 —
+# the Makefile's WOLFRAM_VERSION). This clones it into
+# .devdeps/wolfram by default. For active wolfram development, point the
+# build at a live checkout instead: WOLFRAM_DIR=../wolfram make ...
+make wolfram-checkout
+
+# Build libwolfram and its declared cJSON/libcbor dependencies for PPC. The
+# default checkout above lives at .devdeps/wolfram; if you overrode WOLFRAM_DIR,
+# substitute that path for WOLFRAM in these lines:
+WOLFRAM=.devdeps/wolfram
+$WOLFRAM/tools/build_wii_mbedtls.sh
+cmake -S $WOLFRAM -B $WOLFRAM/build-wii \
+  -DCMAKE_TOOLCHAIN_FILE=$WOLFRAM/.devdeps/wii.cmake \
   -DWOLFRAM_BUILD_WII=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build ../wolfram/build-wii -j
+cmake --build $WOLFRAM/build-wii -j
 
 # Build Channel Blue
 make
@@ -139,7 +148,7 @@ the active sign-in field; Enter submits. Passwords are masked and never saved.
 
 | Library | Purpose | License |
 |---|---|---|
-| [wolfram](https://github.com/ewan-croft/wolfram) | AT Protocol / XRPC | MIT |
+| [wolfram](https://github.com/ewanc26/wolfram) | AT Protocol / XRPC | MIT |
 | [libogc](https://github.com/devkitPro/libogc) | Wii hardware abstraction | Various |
 | [mbedTLS](https://github.com/Mbed-TLS/mbedtls) | TLS/HTTPS | Apache-2.0 |
 | [FreeType](https://freetype.org/) | Font rendering | FreeType GPL/FTL |
