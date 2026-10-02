@@ -1,5 +1,8 @@
 # Channel Blue
 
+> **This project is archived and superseded by [Cobalt](https://github.com/ewanc26/cobalt)**,
+> a Bluesky client for the Wii U (Aroma). It is no longer maintained.
+
 A Bluesky client for the Nintendo Wii.
 
 Browse your timeline, read posts, and compose replies — all from the comfort of
